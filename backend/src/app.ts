@@ -20,7 +20,7 @@ export function createApp(pool: pg.Pool, config: Config) {
   app.use(express.json({ limit: '16kb' }));
   app.get('/health', (_req, res) => { res.json({ status: 'ok' }); });
   app.use('/api/users', usersRoutes(pool, config));
-  app.use('/api', authenticate(config.JWT_SECRET), rateLimit({ windowMs: 60000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
+  app.use('/api', rateLimit({ windowMs: 60000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }), authenticate(config.JWT_SECRET));
   app.use('/api/items', itemsRoutes(pool));
   app.use('/api/inventory', inventoryRoutes(pool));
   app.use('/api/settings', settingsRoutes(pool));

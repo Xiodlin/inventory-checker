@@ -7,6 +7,29 @@ import { createApp } from '../src/app.js';
 import { issueToken } from '../src/api/middleware/auth.js';
 import { parseConfig } from '../src/config/environment.js';
 
+test('unauthenticated items and me requests are throttled before authentication', async () => {
+  let queries = 0;
+  const pool = { query: async () => { queries++; throw new Error('Unauthenticated requests must not query PostgreSQL'); } } as unknown as pg.Pool;
+  const config = parseConfig({ DATABASE_URL: 'postgresql://localhost/db', REDIS_URL: 'redis://localhost', JWT_SECRET: 'a'.repeat(64) });
+  const server = createServer(createApp(pool, config));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  try {
+    for (const path of ['/api/items', '/api/users/me']) {
+      for (let request = 0; request < 300; request++) {
+        const response = await fetch(base + path);
+        assert.equal(response.status, 401);
+        await response.text();
+      }
+      const limited = await fetch(base + path);
+      assert.equal(limited.status, 429);
+      assert.ok(limited.headers.get('ratelimit'));
+      await limited.text();
+    }
+    assert.equal(queries, 0);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
 test('health, authentication, validation, and ownership are enforced', async () => {
   const queries: { sql: string; params: unknown[] }[] = [];
   const pool = { query: async (sql: string, params: unknown[]) => { queries.push({ sql, params }); return { rows: [], rowCount: 0 }; } } as unknown as pg.Pool;

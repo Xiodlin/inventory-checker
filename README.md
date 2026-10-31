@@ -199,6 +199,10 @@ curl -X POST http://localhost:3000/api/users/register \
 Use the returned token in subsequent requests. Validation errors return 400,
 unauthenticated requests 401, inaccessible items 404, duplicate registrations 409,
 and rate-limited requests 429. Internal errors do not expose stack traces.
+Registration/login share a 30-request limit per IP over 15 minutes. Other API
+requests and `/api/users/me` are limited to 300 per IP per minute, before token
+verification. These in-memory limits are per process; use a shared limiter and
+configure trusted proxies deliberately when scaling behind a reverse proxy.
 
 ### WebSocket protocol
 

@@ -39,7 +39,7 @@ export function usersRoutes(pool: pg.Pool, config: Config) {
     const { password_hash: _, ...user } = account;
     res.json({ token: issueToken(user.id, config.JWT_SECRET), user });
   });
-  router.get('/me', authenticate(config.JWT_SECRET), async (_req, res) => {
+  router.get('/me', rateLimit({ windowMs: 60000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }), authenticate(config.JWT_SECRET), async (_req, res) => {
     const user = (await pool.query<User>('SELECT id,email,created_at FROM users WHERE id=$1', [res.locals.userId])).rows[0];
     if (!user) { res.status(401).json({ error: 'Account not found' }); return; }
     res.json(user);

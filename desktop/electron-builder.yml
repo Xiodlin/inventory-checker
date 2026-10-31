@@ -1,0 +1,14 @@
+appId: com.inventorychecker.desktop
+productName: Inventory Checker
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+asar: true
+linux:
+  target: AppImage
+win:
+  target: nsis
+mac:
+  target: dmg

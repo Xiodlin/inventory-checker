@@ -11,9 +11,9 @@ export function itemsRoutes(pool: pg.Pool) {
   router.post('/', async (req, res) => {
     const item = newItem.parse(req.body);
     const created = (await pool.query<Item>(`
-      INSERT INTO tracked_items(id,user_id,retailer,brand,model,sku,url,target_price)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *
-    `, [randomUUID(), res.locals.userId, item.retailer, item.brand ?? null, item.model ?? null, item.sku ?? null, item.url ?? null, item.target_price ?? null])).rows[0];
+      INSERT INTO tracked_items(id,user_id,retailer,brand,model,sku,url,target_price,notify_stock,notify_price,fulfillment,pickup_zip,pickup_radius_miles)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *
+    `, [randomUUID(), res.locals.userId, item.retailer, item.brand ?? null, item.model ?? null, item.sku ?? null, item.url ?? null, item.target_price ?? null, item.notify_stock, item.notify_price, item.fulfillment, item.pickup_zip ?? null, item.pickup_radius_miles ?? null])).rows[0];
     res.status(201).json(created);
   });
   router.get('/:id', async (req, res) => {

@@ -1,26 +1,47 @@
-import { BrowserWindow, ipcMain, Notification } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { readFile, stat, writeFile } from 'node:fs/promises';
+import type { DesktopService } from './localService';
 
-export function registerIpcHandlers(getWindow: () => BrowserWindow | null, rendererUrl: string): void {
-  ipcMain.handle('inventory:notify', (event, payload: unknown) => {
+export function registerIpcHandlers(getWindow: () => BrowserWindow | null, rendererUrl: string, service: DesktopService): void {
+  ipcMain.handle('inventory:local', async (event, operation: unknown, payload: unknown) => {
     const window = getWindow();
-    if (!window || event.sender !== window.webContents ||
-        event.senderFrame !== window.webContents.mainFrame ||
-        event.senderFrame.url !== rendererUrl) {
-      throw new Error('Untrusted notification sender');
+    if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame
+        || event.senderFrame.url !== rendererUrl) throw new Error('Untrusted local-data sender');
+    switch (operation) {
+      case 'items': return service.store.items();
+      case 'item': if (typeof payload === 'string') return service.store.item(payload); break;
+      case 'prices': if (typeof payload === 'string') return service.store.prices(payload); break;
+      case 'add': return service.store.addItem(payload);
+      case 'delete': if (typeof payload === 'string') return service.store.deleteItem(payload); break;
+      case 'notifications': return service.store.notifications();
+      case 'read': if (typeof payload === 'string') return service.store.markRead(payload); break;
+      case 'settings': return service.store.settings();
+      case 'save-settings': return service.store.saveSettings(payload);
+      case 'status': return service.store.status();
+      case 'check': return service.monitor.checkNow();
+      case 'check-due': return service.monitor.tick();
+      case 'save-key': return service.saveKey(payload);
+      case 'has-key': return Boolean(await service.getKey());
+      case 'test-notification': return service.testNotification();
+      case 'shopping-search': return service.shopping.search(payload);
+      case 'shopping-history': return service.shopping.history();
+      case 'shopping-clear': return service.shopping.clearHistory();
+      case 'export': {
+        const selected = await dialog.showSaveDialog(window, { defaultPath: 'inventory-backup.json', filters: [{ name: 'JSON backup', extensions: ['json'] }] });
+        if (selected.canceled || !selected.filePath) return false;
+        await writeFile(selected.filePath, await service.store.exportBackup(), { mode: 0o600 });
+        return true;
+      }
+      case 'import': {
+        const selected = await dialog.showOpenDialog(window, { properties: ['openFile'], filters: [{ name: 'JSON backup', extensions: ['json'] }] });
+        if (selected.canceled) return false;
+        const path = selected.filePaths[0];
+        if ((await stat(path)).size > 16 * 1024 * 1024) throw new Error('Backup exceeds the 16 MB limit');
+        await service.store.importBackup(await readFile(path, 'utf8'));
+        window.webContents.send('inventory:changed');
+        return true;
+      }
     }
-    if (!payload || typeof payload !== 'object') throw new Error('Invalid notification');
-    const { title, body } = payload as { title?: unknown; body?: unknown };
-    if (typeof title !== 'string' || typeof body !== 'string' ||
-        title.trim().length === 0 || title.length > 120 || body.length > 1000) {
-      throw new Error('Invalid notification text');
-    }
-    if (!Notification.isSupported()) return false;
-    const notification = new Notification({ title, body });
-    notification.on('click', () => {
-      window.show();
-      window.focus();
-    });
-    notification.show();
-    return true;
+    throw new Error('Invalid local-data operation');
   });
 }

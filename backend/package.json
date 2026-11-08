@@ -10,6 +10,7 @@
     "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc && node -e \"require('node:fs').cpSync('src/database/migrations', 'dist/database/migrations', { recursive: true })\"",
     "start": "node dist/server.js",
     "migrate": "tsx src/migrate.ts",
+    "export:local": "tsx src/exportLocal.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test test/*.test.ts"
   },
@@ -17,6 +18,7 @@
   "author": "",
   "type": "module",
   "dependencies": {
+    "@inventory-checker/core": "1.0.0",
     "express": "5.3.0",
     "pg": "8.23.1",
     "redis": "6.3.1",

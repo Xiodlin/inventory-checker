@@ -5,10 +5,19 @@ import { NotConfiguredError } from '../src/scrapers/baseScraper.js';
 import type { Item } from '../src/database/models/TrackedItem.js';
 const item = { retailer: 'bestbuy', sku: '12345', url: 'http://127.0.0.1/internal' } as Item;
 
-test('disabled integrations fail explicitly without network calls', async () => {
+test('missing credentials and invalid product sources fail without network calls', async () => {
   const noFetch = (async () => { throw new Error('Must not fetch'); }) as typeof fetch;
   await assert.rejects(checkInventory(item, undefined, noFetch), NotConfiguredError);
-  await assert.rejects(checkInventory({ ...item, retailer: 'amazon' }, 'key', noFetch), NotConfiguredError);
+  await assert.rejects(checkInventory({ ...item, retailer: 'amazon' }, 'key', noFetch), /HTTPS product URL/);
+});
+test('Best Buy resolves a product URL to a SKU without fetching the supplied URL', async () => {
+  const mock = (async (input: URL | RequestInfo) => {
+    assert.equal(new URL(String(input)).hostname, 'api.bestbuy.com');
+    assert.match(String(input), /sku=654321/);
+    return Response.json({ products: [{ salePrice: 499, onlineAvailability: false }] });
+  }) as typeof fetch;
+  assert.deepEqual(await checkInventory({ ...item, sku: null, url: 'https://www.bestbuy.com/site/playstation/654321.p' }, 'key', mock),
+    { price: 499, in_stock: false });
 });
 test('Best Buy uses only fixed API host, query params, timeout, no redirects', async () => {
   const mock = (async (input: URL | RequestInfo, init?: RequestInit) => {

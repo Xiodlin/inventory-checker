@@ -1,75 +1,120 @@
 # Architecture
 
-## Workspace boundaries
+## Device-local boundaries
 
 ```text
-mobile (React Native/Expo) ──┐
-                            ├── HTTPS REST + authenticated WSS ── backend (Express)
-desktop (Electron/React) ───┘                                      │
-                                                ┌─────────────────┼─────────────┐
-                                           PostgreSQL           Redis       retailers
-                                                │                             adapters
-                                           notifications ── FCM ── mobile OS
+Desktop renderer -> trusted Electron preload IPC -> desktop main process
+                                                    | SQLite + OS key encryption
+                                                    | local scheduler + notifications
+                                                    `-> HTTPS retailers
+
+Mobile screens -> local service -> Expo SQLite + SecureStore
+                                -> foreground scheduler / OS background task
+                                -> local notifications
+                                `-> HTTPS retailers
+
+Both runtimes reuse shared/ for validation, adapters, alerts, SQLite operations,
+monitoring, and the backup contract. No inventory backend is required.
 ```
 
-- `backend/src/api`: validated, authenticated, user-scoped HTTP endpoints.
-- `backend/src/database`: pooled SQL connections, domain types, versioned SQL
-  migrations. PostgreSQL is the source of truth.
-- `backend/src/scrapers`: retailer-neutral snapshot contract and isolated retailer
-  implementations. Unknown/unconfigured data is not represented as out of stock.
-- `backend/src/services`: periodic checks, Redis TTL caching, persistent
-  notifications, FCM delivery, and scoped WebSocket publication.
-- `mobile/src`: typed API access, navigation, screens, in-app events, optional
-  native Firebase notifications, and non-sensitive device preferences.
-- `desktop/src/main`: sandboxed window, narrow preload bridge, tray and native
-  notifications. The renderer cannot access Node.js or arbitrary IPC capabilities.
-- `desktop/src/renderer`: React client with the same REST/WebSocket contract.
+- `shared/src`: portable product/stock types, Zod schemas, retailer adapters,
+  notification rules, transactional local storage, and bounded monitoring.
+- `desktop/src/main`: embedded Node SQLite, serialized SQL adapter, encrypted API
+  key file, scheduler/tray/wake lifecycle, native alerts, and validated IPC.
+  On macOS the development launcher packages and ad-hoc-signs its own local app,
+  verifying the complete bundle before launch. Native notifications require a valid
+  signature; the app leaves notification authorization to the OS. Settings offers
+  an explicit test and permission troubleshooting. Displayed notifications retain
+  references until closed; successful OS submission does not prove banner visibility.
+- `desktop/src/renderer`: React UI with no Node access, login, HTTP API, or WebSocket.
+  CSP disables renderer network connections; retailer fetching belongs in main.
+- `mobile/src/services`: Expo SQLite adapter, SecureStore, Expo Fetch for retailer
+  requests, local notifications, file backups, and top-level background task.
+- `backend/`: optional legacy server and one-time account-scoped exporter. Its
+  existing API/authentication contracts remain available but neither client uses
+  them. Docker/PostgreSQL/Redis/Firebase are not local-client dependencies.
 
-## Data ownership
+## Persistence and ownership
 
-A user owns tracked items, settings, device registrations, and notifications.
-Price-history rows belong to a tracked item. Foreign keys and cascading deletes
-preserve consistency; route queries include the authenticated user ID rather than
-trusting IDs supplied by a client. SQL values are parameterized.
+Each app owns one device-private `inventory.sqlite` with schema-version checks and
+transactional creation. Items, preferences, history, notifications, and scheduler
+lease/status are durable. UUIDs identify entries; the legacy `user_id` field is
+local metadata, not a login or authorization mechanism. Device OS access controls
+protect local data; SQLite is not itself encrypted.
 
-Passwords are salted and derived using Node's scrypt; JWTs have limited lifetimes.
-Clients retain authentication in memory for this starter. Mobile/desktop tokens
-must be stored in secure OS-backed storage if persistent login is added.
-WebSocket authentication occurs in the first message, with an authentication timeout.
+SQL values are parameterized. Per-connection queues prevent asynchronous UI
+queries from accidentally joining a transaction. SQLite foreign keys cascade item
+history on removal. Mobile uses a dedicated connection and explicit immediate
+transactions so connection-specific foreign keys and timeouts remain effective.
+Successful stock snapshots, history, and resulting alerts
+commit atomically; failures preserve last known stock and record a visible error.
 
-## Check lifecycle
+Best Buy credentials are separate from the database: Electron `safeStorage`
+encryption (no insecure Linux plaintext fallback) or mobile SecureStore with
+after-first-unlock accessibility. Backups never contain keys, password hashes, or
+JWTs. Product ZIPs are personal location data and remain in backups; no automatic
+app-managed upload or synchronization occurs. OS backups follow device settings.
 
-1. The cron service selects due tracked items according to user polling intervals.
-2. A retailer adapter resolves an identifier and returns a validated availability/
-   price snapshot. Unsupported adapters return an explicit configuration error.
-3. Redis caches successful retailer results for a short TTL. PostgreSQL retains
-   item state and price history; failed checks do not overwrite the last good state.
-4. Stock transitions and qualifying price changes generate persistent notifications.
-5. Authenticated WebSocket clients receive item/panel events. Enabled mobile push
-   preferences also permit delivery through FCM to registered devices.
+Backups use a versioned validated JSON format, consistent snapshot export, and
+transactional import. The 16 MB limit applies to UTF-8 bytes on export and import. Existing
+IDs remain unchanged, imported notifications are not re-delivered, and device
+preferences remain local. The legacy exporter selects one account and writes the
+same format without deleting the original PostgreSQL data.
 
-The in-app panel remains available without Firebase. Native desktop notifications
-require a running desktop process; mobile background push requires native Firebase/
-APNs configuration. Neither WebSocket nor push is a guaranteed durable delivery
-channel; notification history in PostgreSQL provides the recovery path.
+## Monitoring lifecycle
 
-## Operational boundaries
+1. Desktop starts monitoring after local database initialization, then every minute.
+   Suspension cancels further batch work and pauses the timer; resume triggers due
+   checks. Closing the window keeps the main process/tray alive; Exit waits for
+   active work and closes storage. Sleep is not prevented.
+2. Mobile initializes local services and requests notification/background permissions
+   from the foreground UI. Foreground minute ticks pause off-screen. A top-level
+   TaskManager definition allows headless execution in a native build.
+3. The monitor selects oldest due products by the device's interval, coalesces
+   overlapping work, and uses a renewable SQLite lease to exclude competing
+   runtimes. The lease expires after a killed process; background batches are
+   bounded and expiry requests stop launching further work.
+4. Portable adapters fetch only fixed retailer HTTPS hosts with no automatic redirects and
+   explicit timeouts/body limits. Unknown/malformed/blocked responses are errors.
+   Amazon share links resolve once to a validated canonical Amazon product URL;
+   public HTML requires exact ASIN identity and recognized primary availability.
+   Target `preselect` selects a validated variant TCIN; the parent is never used
+   as a stock fallback. Dynamic Target pages without public offer metadata fail
+   explicitly. Embedded eligibility flags are not treated as availability.
+   Manual Check now bypasses item intervals, reports results, and does not overlap
+   scheduled work. Automatic checks remain due-only.
+   Apple pickup resolves an exact configured SKU and validates per-store distances,
+   ZIP, eligibility, and stock; shipping never substitutes for pickup.
+5. User-enabled stock/price rules generate durable alerts. Stock-only observations
+   allow a null price. Pickup alerts identify newly available stores rather than
+   only aggregate stock transitions.
+6. The runtime submits undelivered alerts to the local OS notification system.
+   Permission failures are retained in the panel and status, not silently swallowed.
+   Crash windows and OS presentation restrictions prevent exactly-once guarantees.
 
-Migrations run explicitly and serialize concurrent migration attempts.
-The starter scheduler avoids overlapping runs in one process, not across replicas.
-Production scaling needs a durable queue, distributed locks, retry policies,
-delivery state, metrics, and retailer-specific request budgets.
+## Sleep and deployment limits
 
-Docker Compose provides local databases, not production deployment. PostgreSQL
-and Redis ports bind to loopback. Secrets come from ignored environment files;
-Firebase service accounts stay server-side. The backend must not fetch arbitrary
-client-provided URLs, and Electron must not load untrusted remote pages.
+Desktop shopping discovery is separate from the shared retailer monitor. A
+short-lived sandboxed Electron window loads Google Shopping on a manual request.
+It has an ephemeral session, no preload/Node access, denied permissions/downloads,
+restricted navigation, and no automatic interaction with consent/CAPTCHA controls.
+Only visible offer cards with titles and unambiguous prices are extracted. Required
+title phrases, accessory/condition checks, and explicit availability labels produce
+reported or uncertain matches, not verified retailer stock. The latest 20 outcomes
+are stored in a desktop-only SQLite table and can be cleared from the UI; they do
+not change watchlists, backups, or notification rules. Suspension cancels the
+window and shutdown waits for cleanup. Live Google access has been blocked in
+testing, so successful live extraction is not promised.
 
-## Extension priorities
+Desktop cannot run network checks during actual system sleep. Mobile requests an
+inexact background delay of at least 15 minutes; the OS may run much later or not at
+all under power, force-quit, permission, or network restrictions. Existing stock
+cannot be inferred from scheduled reminders. Reliable unattended alerts while a
+device cannot execute require an external always-on service and are intentionally
+not promised by this design.
 
-1. Authorized retailer product resolution by SKU/brand/model, contract-tested
-   snapshots, currency and region/store semantics.
-2. Distributed polling, transient-error backoff, transactional notification outbox,
-   and retention/pagination.
-3. Production account lifecycle, credential storage, native notification testing,
-   client reconnect/recovery, signed installers, and deployment monitoring.
+Native iOS/Android builds are required for background tasks. Metro/Expo development
+tooling is not a production backend. Background execution must be validated on
+physical devices; bundle/type/configuration validation is insufficient evidence
+of actual scheduling. Apple's pickup endpoint currently blocks the live probe with
+HTTP 541, so successful live pickup monitoring remains unverified.

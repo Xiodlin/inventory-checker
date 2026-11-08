@@ -12,6 +12,7 @@ export default function NotificationPanel({ notifications, onRead }: {
       disabled={notification.read} onPress={() => onRead(notification.id)} style={styles.notification}>
       <Text style={{ fontWeight: notification.read ? '400' : '700' }}>{notification.title}</Text>
       <Text>{notification.body}</Text>
+      {!!notification.delivery_error && <Text accessibilityRole="alert">Device alert not delivered: {notification.delivery_error}</Text>}
       <Text>{new Date(notification.created_at).toLocaleString()}{notification.read ? ' · Read' : ' · Tap to mark read'}</Text>
     </Pressable>)}
   </View>;

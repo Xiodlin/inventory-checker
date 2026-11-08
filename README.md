@@ -1,256 +1,260 @@
-# inventory-checker
+# Inventory Checker
 
-A TypeScript monorepo for tracking availability and price alerts across Apple,
-Target, Best Buy, and Amazon, with React Native mobile and Electron desktop clients.
+A local-first Electron desktop and React Native/Expo mobile app for retailer
+availability and price alerts. **Neither app needs Docker, an API server, an
+account, Redis, or Firebase.** Each device owns its own SQLite database.
 
-## What is included
+## Run locally
 
-- Express API with registration/login, user-owned items, inventory status, price
-  history, preferences, notification history, and authenticated WebSocket updates.
-- PostgreSQL schema and versioned migrations; Redis caching; scheduled checks.
-- Retailer adapter interface and extension templates. **Amazon, Target, and Apple
-  are not live integrations.** Best Buy requires an API key and a product SKU.
-- Mobile dashboard, add-item, item details, settings, and notification panel.
-- Desktop dashboard, item entry, settings, notification panel, tray, and native alerts.
-- Optional Firebase Cloud Messaging delivery to registered mobile devices.
-
-This is a development foundation, not a production-ready retailer monitoring service.
-An unconfigured adapter never invents prices or availability. Brand/model tracking
-can be saved, but retailer-specific product resolution must be implemented before
-those items can be checked.
-
-## Requirements
-
-- Node.js 22.12+ and npm (Node 24 recommended).
-- Docker with Compose for PostgreSQL 16 and Redis 7.
-- Mobile: Android Studio/Android SDK or macOS with Xcode for native builds.
-- Desktop: a graphical environment; platform signing credentials for distribution.
-- Optional: Firebase project and Best Buy developer API access.
-
-## Local setup
-
-Run commands from the repository root unless indicated otherwise:
+Requirements: Node.js 22.12+ (Node 24 recommended), npm, and a graphical desktop.
 
 ```sh
 npm install
-cp .env.example .env
-cp backend/.env.example backend/.env
-cp mobile/.env.example mobile/.env
-cp desktop/.env.example desktop/.env
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-```
-
-Use independently generated random values for `POSTGRES_PASSWORD` in the root
-`.env` and `JWT_SECRET` in `backend/.env`. Set backend `DATABASE_URL` to a
-PostgreSQL connection URL with user `inventory`, your generated password,
-host `localhost`, port `5432`, and database `inventory_checker`.
-URL-encode the password if it contains reserved URL characters. Never commit
-credentials. Backend configuration is loaded relative to the backend workspace.
-
-```sh
-npm run services:up
-npm run db:migrate
-npm run dev:backend
-```
-
-The API defaults to `http://localhost:3000`; `GET /health` is a health check.
-Migrations are explicit, not automatically run on startup. Re-running them is safe.
-Docker volumes preserve data across restarts:
-
-```sh
-npm run services:down
-# Destructive reset, only if you intend to delete local data:
-docker compose down -v
-```
-
-### Desktop
-
-In another terminal:
-
-```sh
 npm run dev:desktop
 ```
 
-Configure `desktop/.env` with `VITE_API_URL` if the API is not at
-`http://localhost:3000`. HTTP is permitted only for loopback hosts; remote API hosts
-require HTTPS. Rebuild after changing the URL so the renderer CSP allows the exact
-API/WebSocket host. Register or log in, add an item, and inspect the notification
-panel. Desktop alerts come from the authenticated WebSocket, not FCM. Closing the
-window keeps the tray application running; use the tray menu to quit.
+On macOS this builds and ad-hoc-signs a local `.app` under
+`desktop/release/local-dev/` before launching it. Electron's macOS notification
+API requires a signed bundle; raw `electron .` / `npm start --workspace desktop`
+can fail before showing any permission prompt. This does not modify the installed
+Electron binary, require an Apple Developer account, or notarize a distributable
+release. Quit older tray instances before switching to the signed build.
+
+Use **Settings → Test desktop notification** to submit an explicit test and allow
+the macOS prompt if shown. If previously denied, open **System Settings →
+Notifications → Inventory Checker** and enable alerts. Focus / Do Not Disturb can
+hide banners even when an alert was accepted. The test sends one notification
+regardless of the automatic-alert preference; it does not change that preference.
+Existing unread, undelivered alerts are retried on later checks.
+
+The desktop app opens directly to your watchlist. Closing its window keeps it in
+the tray; tray **Exit** stops monitoring. Its database is `inventory.sqlite` in
+Electron's user-data directory, normally
+`~/Library/Application Support/Inventory Checker/` on macOS. The renderer uses
+validated IPC, not a localhost HTTP server.
 
 ### Mobile
 
-Set `EXPO_PUBLIC_API_URL` in `mobile/.env`:
+Use a native development or production build; Expo Go is not sufficient for the
+background workflow. Android requires Android Studio/SDK; iOS requires macOS and
+Xcode with the necessary simulator/device support and signing.
 
-- Android emulator: `http://10.0.2.2:3000`.
-- iOS simulator: `http://localhost:3000`.
-- Physical device: the development machine's LAN address, reachable on the same network.
+```sh
+npm run ios --workspace mobile
+# Or:
+npm run android --workspace mobile
+```
+
+After installing the native development build:
 
 ```sh
 npm run dev:mobile
-# Native development, from the root:
-npm run android --workspace mobile
-npm run ios --workspace mobile
 ```
 
-Use HTTPS/WSS outside local development. Plain HTTP may need a development-only
-Android network-security or iOS transport exception; do not ship a broad exception.
-The API's CORS configuration must allow the desktop renderer origin (`file://`
-for WebSockets, and `null` where emitted by local renderers); native apps
-are not governed by browser CORS.
+**Rebuild any previously installed mobile client:** this conversion adds native
+SQLite, notification, background-task, secure-storage, and backup modules.
+No mobile/desktop `.env` file or API URL is required. Old API/Firebase environment
+values are no longer used. Metro is development tooling, not an inventory backend;
+a distributed production build bundles the application itself.
 
-### Optional push notifications
+Products, history, alerts, and preferences live in the mobile application's private
+SQLite directory. Best Buy keys use OS secure storage, accessible after the first
+device unlock for background work. Grant notification permission when prompted;
+Settings allows requesting it again. If denied, alerts remain in the app and
+delivery failures are shown explicitly.
 
-FCM is disabled by default, so basic tracking does not require Firebase.
+## Checks, sleep, and notifications
 
-1. Create Firebase Android/iOS applications with identifiers matching `mobile/app.json`.
-2. Download `google-services.json` and `GoogleService-Info.plist` into the mobile
-   workspace (both are gitignored). `mobile/app.config.ts` automatically configures
-   their paths and Firebase plugins when push is enabled; both files are required.
-3. Set `EXPO_PUBLIC_FIREBASE_ENABLED=true` and create a native development build.
-   React Native Firebase **does not work in Expo Go**. Rebuild after native config changes.
-4. Enable backend `FIREBASE_ENABLED` and point `GOOGLE_APPLICATION_CREDENTIALS` to a
-   server-side service-account file outside the repository. The starter requires
-   file-based application default credentials; metadata-only credentials are not
-   enabled. Never put server credentials in the mobile or desktop app.
-5. Grant device notification permission. Device tokens register through the
-   authenticated API; the application panel also receives WebSocket updates.
+- Default product interval: **15 minutes**, configurable from 5 to 10,080 minutes.
+- Desktop and foreground mobile look for due products every minute. New products
+  also request a local check immediately; overlapping runs are coalesced.
+- **Check now** retries every tracked product immediately, including recent failed
+  checks, and reports successes/failures. Automatic checks still respect your interval.
+  Manual requests wait for an active run and coalesce repeated clicks; suspension
+  interrupts remaining work. Each product shows its last attempt and any error.
+- Desktop checks continue while minimized/in the tray **only while the computer
+  is awake**. Actual system sleep pauses execution; due checks catch up on wake.
+  Fully quitting or powering off stops checks. The app does not prevent sleep.
+- Mobile requests best-effort OS background execution by default. Its requested
+  background delay is at least **15 minutes**, even if foreground checks use 5.
+  iOS/Android decide when to run—often much later. A locked screen can allow
+  background work, but battery restrictions, Background App Refresh settings,
+  force-quitting, reboot/first-unlock state, and network conditions can prevent it.
+  Turn background checks off in Settings if desired.
+- Background runs process a small bounded batch of due products and prioritize
+  oldest attempts. Large watchlists may need additional OS opportunities.
+- **No device-only design guarantees timely stock alerts during sleep.** Local
+  notifications are generated after an actual successful check; a previously
+  scheduled reminder cannot know whether stock has changed.
 
-iOS additionally requires APNs configuration in Firebase and signing capabilities.
-Platform-specific background delivery and signing must be verified on real devices.
+Successful observations update price/stock history transactionally. Stock alerts
+cover first-observed availability and restocks, not every unchanged check. Price
+alerts require an available product at/below a target and a qualifying price or
+availability change. A stock-only product does not require a price. Failed checks
+preserve the last good state and show errors, never invented stock or prices.
+Undelivered native alerts are retained in the local notification panel and retried
+while enabled; OS delivery and crash recovery are not exactly-once guarantees.
 
-## Development commands
+## Retailers and Apple pickup
+
+Choose stock alerts, target-price alerts, or both for each product.
+
+### Experimental desktop shopping discovery
+
+**Find this product** in the desktop sidebar performs a manual Google Shopping
+search without an API key. Enter a product/model and required variant phrases
+(for example `MacBook Neo` and `256GB, Indigo`). An optional example URL is a saved
+reference only: this prototype does not fetch it or infer specifications from it.
+
+A separate sandboxed browser renders normal Google results. It has no application
+preload, Node access, sign-in session, download permission, or access to the local
+app's IPC bridge. It does not click purchase controls or automate CAPTCHA/consent.
+Navigation stays on Google's search/product pages. Cookies/cache are cleared after
+each search; the latest **20** search results or errors are retained in local SQLite.
+Use **Clear shopping search history** to remove them. This history is not included
+in watchlist backups. Google receives the search, network address, and browser
+requests; on-device storage does not mean offline or third-party-free processing.
+No ZIP/GPS is sent by this prototype; location-dependent results may use Google's
+inferred location and are not verified to be near you.
+
+Required text matches contain all requested phrases in the offer title. This is
+not proof of an exact SKU: uncertain variants, accessories, and used/refurbished
+listings are separated. Stock requires an explicit visible stock/pickup label;
+a price, delivery estimate, or ordinary listing alone leaves availability unknown.
+All availability is **Google-reported**, never retailer-verified. Offers are not
+automatically added to the watchlist and do not trigger native alerts.
+
+This is manual-only, desktop-only, with a 30-second timeout. Existing automatic
+retailer checks are unchanged. Live Google testing encountered unusual-traffic/
+verification blocking; extraction and matching passed controlled rendered-page
+tests, but successful live offer extraction is **not yet verified**. Google's
+layouts and access policies can change. Blocked, consent, unsupported, and
+unreadable pages produce explicit errors—not successful empty-stock results.
+
+| Retailer | Input and requirements |
+|---|---|
+| Best Buy | Numeric SKU or Best Buy product URL. Enter a Best Buy developer API key in the app's Settings. Uses the official product API. |
+| Amazon | ASIN, HTTPS `amazon.com` URL containing `/dp/ASIN` or `/gp/product/ASIN`, or `https://a.co/d/...` share link. Reads public Schema.org data or exact-ASIN product-page stock/price fields; verification pages fail explicitly. |
+| Target | TCIN or HTTPS `target.com/p/.../-/A-TCIN` URL. A `preselect=TCIN` query selects that exact variant instead of the parent TCIN. Requires public stock/offer metadata; dynamic-only pages are unsupported and show an explicit error. |
+| Apple shipping | Specific HTTPS `apple.com/shop/product/...` URL publishing usable stock metadata. |
+| Apple pickup | A specific `/shop/product/...` URL or fully configured `/shop/buy-.../.../...` URL. Select Apple Store pickup and enter a five-digit US ZIP and a 1–250-mile radius (default **50**). |
+
+Best Buy keys are encrypted with Electron OS credential protection on desktop and
+SecureStore on mobile, not written into SQLite or backups. No plaintext fallback is
+used if desktop credential encryption is unavailable.
+
+### Getting a Best Buy API key
+
+Best Buy is currently the only retailer requiring a user-supplied API key.
+In either app's Settings, select **How to get a key** beside the key field to open
+these instructions in a pop-up. Select **Close** to return to Settings (desktop
+also supports Escape; Android supports Back):
+
+1. Open the official [Best Buy developer portal](https://developer.bestbuy.com/)
+   in your browser and select **Get API Key**.
+2. Sign in to or create a Best Buy account. Follow the developer registration
+   prompts and review the API terms.
+3. Copy the API key issued by the developer portal into **Settings → Best Buy API
+   key**, then choose **Save preferences** on desktop or **Save settings and enable
+   notifications** on mobile.
+
+Use the API key, **not your account password**. Do not share it in screenshots,
+logs, or support messages. Keys are not transferred by backups; configure each
+device separately. If the portal does not issue a key, contact Best Buy developer
+support rather than entering another credential. Access is subject to Best Buy's
+registration requirements and API limits; see their
+[official API documentation](https://bestbuyapis.github.io/api-documentation/#user-guide).
+Amazon, Target, and Apple checks do not currently need API keys.
+
+Apple pickup resolves the exact offer SKU from the product page, including carrier,
+then uses Apple's public-facing fulfillment endpoint. Returned stores are validated,
+sorted nearest first, and filtered by their numeric distance (kilometers are
+converted to miles; exactly-on-boundary stores are included). Availability means
+the exact configuration is pickup-eligible at a returned store inside your radius;
+shipping stock is never a fallback. Alerts name newly available stores even while
+another store remains available.
+
+ZIP codes are stored locally per product and sent to Apple for pickup queries—not
+to a geocoding service. No full street address or GPS is collected. Distances are
+from Apple's ZIP-area search, not your house or driving routes. Apple may return a
+limited nearest-store list rather than every store in the radius.
+
+**Retailer access remains best-effort.** An Apple accessory shipping check and exact
+iPhone configuration resolution were verified live. Apple's pickup endpoint returned
+HTTP 541. Amazon has returned verification pages on earlier probes; the supplied
+`B0CX18LHWS` product page was fetched and its public HTML checked during this update.
+Moving checks onto your device
+does not remove blocking. Missing metadata, ambiguous variants, malformed data,
+timeouts, and blocked responses remain visible errors. Adapters use fixed HTTPS
+hosts, no automatic redirects, bounded responses, and timeouts. Amazon share links
+allow one inspected redirect only to a validated Amazon product URL; tracking
+parameters are removed before fetching the canonical product. They do not execute remote
+JavaScript or bypass access controls. Respect retailer terms, robots policies, and
+rate limits; use authorized integrations where public access is insufficient.
+
+The supplied Target MacBook link selects TCIN `91122045` (256GB, Blush), not parent
+`95288385`. Its public page was verified to load but lacked price/stock metadata.
+Variant selection is supported; successful live availability monitoring for that
+page is **not** verified or currently supported. Product eligibility flags and
+generic shipping descriptions are not evidence of stock.
+
+## Backups and moving existing data
+
+Each device is independent. There is **no automatic cloud sync**. The app does not
+upload its database; operating-system backups are controlled by device settings.
+Uninstalling/clearing mobile data or deleting the desktop user-data directory can
+remove your watchlist.
+
+Both apps have **Export local backup** and **Import backup / legacy data** in
+Settings. Export includes products, up to 1,000 history entries per product, and
+the latest 1,000 alerts. The format supports up to 500 products and a 16 MB import
+limit. Backups include pickup ZIPs: keep them private. They exclude credentials,
+API keys, and device-specific settings.
+
+Import is transactional, keeps entries with already-existing item IDs unchanged,
+and does not re-send imported alerts. File export is user-directed; choose a local
+destination if you do not want a cloud-backed folder/share target.
+
+Your previous PostgreSQL/Docker data is **not deleted or automatically imported**.
+To move the previous watchlist/history/alerts, keep the legacy database running
+just for this one-time export:
 
 ```sh
-npm run typecheck         # All three workspaces
-npm run build             # Backend + desktop (mobile uses Expo/native builds)
-npm test                  # Focused backend tests
+npm run build --workspace shared
+npm run db:migrate
+npm run export:local --workspace backend -- your-account-email inventory-backup.json
+```
+
+Import that JSON through Settings on desktop and/or mobile. The exporter uses the
+existing backend environment configuration, selects only that account, omits
+credentials, and refuses to overwrite an existing output file. Then the old backend
+and Docker services can be stopped:
+
+```sh
+npm run services:down
+```
+
+Do not delete Docker volumes until you have verified the imported data.
+
+## Development and validation
+
+```sh
+npm run typecheck
+npm run build               # Shared engine + desktop
+npm test                   # SQLite/core + legacy retailer/API tests
+npm test --workspace desktop # Actual Electron SQLite/IPC smoke test, after build
 npm run package --workspace desktop
 ```
 
-There is no separate lint setup. The lockfile records the shared dependency tree;
-use `npm ci` for repeatable installs once it is present. Build artifacts, native
-generated projects, `.env` files, and Firebase credentials are ignored.
+The shared package builds automatically for desktop. Metro uses its portable
+TypeScript source for mobile. There is no separate lint setup.
 
-The root manifest pins patched gRPC and modern glob/minimatch transitive versions.
-`npm audit --omit=dev` reports no vulnerabilities in the installed runtime tree.
-The full audit still reports moderate minimatch denial-of-service advisories in
-legacy Electron packaging dependencies; npm proposes breaking tooling changes
-rather than compatible fixes. Use only trusted local packaging inputs and
-recheck `npm audit` before distributing builds. Do not run `npm audit fix --force`
-without testing the resulting major tooling changes.
+Verified for the local-first conversion: SQLite persistence/reopening, atomic
+updates/import, polling intervals/wake catch-up, durable alerts, lease exclusion,
+retailer regressions, sandboxed Electron IPC, desktop build, both iOS/Android Metro
+bundles, and native background configuration. **Physical-device sleep/background
+execution and notification delivery still need on-device validation.** Bundling
+does not prove that an OS will schedule background work.
 
-## API reference
-
-JSON request/response bodies; all `/api` routes except registration and login
-require an `Authorization` header using the `Bearer` scheme and the login token.
-IDs are UUIDs. Responses for list endpoints
-are arrays. Item access, histories, preferences, notifications, and device tokens
-are scoped to the authenticated user.
-
-| Method | Path | Purpose / request |
-|---|---|---|
-| POST | `/api/users/register` | `{ "email": "...", "password": "..." }` → `{ token, user }` |
-| POST | `/api/users/login` | Same request → `{ token, user }` |
-| GET | `/api/users/me` | Current user (never password hash) |
-| GET | `/api/items` | List tracked items |
-| POST | `/api/items` | Add item, example below |
-| GET | `/api/items/:id` | Item details |
-| DELETE | `/api/items/:id` | Remove item and dependent history |
-| GET | `/api/items/:id/prices` | Price/availability history |
-| GET | `/api/inventory` | Latest inventory states |
-| GET | `/api/settings` | Notification preferences and polling interval |
-| PATCH | `/api/settings` | `{ "notifications_enabled": true, "check_interval_minutes": 15 }` |
-| GET | `/api/notifications` | In-app notification history |
-| PATCH | `/api/notifications/:id` | `{ "read": true }` |
-| POST | `/api/notifications/devices` | Register FCM `{ "token": "..." }` |
-| DELETE | `/api/notifications/devices` | Unregister FCM `{ "token": "..." }` |
-
-Example item:
-
-```json
-{
-  "retailer": "bestbuy",
-  "brand": "Example",
-  "model": "Example Model",
-  "sku": "1234567",
-  "target_price": 199.99
-}
-```
-
-Retailer values: `amazon`, `target`, `bestbuy`, `apple`. Supply a SKU, a product URL,
-or a model (optionally with a brand). Passwords must contain 8–128 characters, and
-check intervals range from 5 to 10080 minutes. Prices use the retailer's supported currency; the foundation
-does not perform currency conversion. New items have unknown price/availability
-until a successful check. `last_checked_at` records attempts; `last_check_error`
-explains failed or unconfigured checks without replacing the last good price/stock.
-Price history records observed changes, not every polling attempt.
-Saved URLs are identifiers, not arbitrary server-side
-fetch targets.
-
-Registration example:
-
-```sh
-curl -X POST http://localhost:3000/api/users/register \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"demo@example.com","password":"choose-a-long-unique-password"}'
-```
-
-Use the returned token in subsequent requests. Validation errors return 400,
-unauthenticated requests 401, inaccessible items 404, duplicate registrations 409,
-and rate-limited requests 429. Internal errors do not expose stack traces.
-Registration/login share a 30-request limit per IP over 15 minutes. Other API
-requests and `/api/users/me` are limited to 300 per IP per minute, before token
-verification. These in-memory limits are per process; use a shared limiter and
-configure trusted proxies deliberately when scaling behind a reverse proxy.
-
-### WebSocket protocol
-
-Connect to `ws://localhost:3000/ws` (use WSS in production), then immediately send:
-
-```json
-{ "type": "auth", "token": "<login token>" }
-```
-
-Tokens are never placed in URL query strings. Unauthenticated connections time out.
-Events are user-scoped:
-
-```json
-{ "type": "item.updated", "item": { "id": "...", "current_price": 199.99, "in_stock": true } }
-```
-
-```json
-{ "type": "notification", "notification": { "id": "...", "title": "...", "body": "..." } }
-```
-
-Treat events as invalidation signals and reload API data as necessary. Reload history
-after reconnecting: WebSocket delivery is not a durable queue.
-
-## Extending retailer integrations
-
-Implement the contract in `backend/src/scrapers/baseScraper.ts` and register the
-adapter in the scheduler. Prefer authorized official APIs. Best Buy uses
-`BESTBUY_API_KEY`; API access and data availability are subject to retailer policies.
-Target's unofficial endpoints should not be assumed stable or authorized.
-Amazon and Apple need approved data sources or permitted scraping implementations.
-
-Respect terms of service, robots policies, rate limits, timeouts, and regional/store
-availability. Do not bypass access controls. Use fixed allowlisted retailer hosts;
-do not fetch arbitrary user URLs. Add product lookup, currency/region handling,
-retry/backoff, adapter contract tests, and observability before enabling live checks.
-
-The scheduler respects user polling preferences, compares successful snapshots,
-persists history, and creates back-in-stock/target-price alerts. It is designed for
-a **single backend process**; distributed scheduling/locking is needed before
-running multiple workers.
-
-## Production considerations
-
-Add email verification/password reset, token revocation, secure OS credential
-storage, reconnect/backoff, notification delivery retries, retention/pagination,
-monitoring, backups, and deployment automation. Use TLS, restrict allowed origins,
-rotate secrets, and protect PostgreSQL/Redis behind private networks with
-authentication. The local Redis service intentionally has no password and binds
-only to loopback. This project does not include packaged/signed mobile binaries.
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for boundaries and data flow.
+`backend/` and Docker Compose remain as optional legacy/export tooling, not client
+runtime dependencies. See [ARCHITECTURE.md](./ARCHITECTURE.md) for boundaries.

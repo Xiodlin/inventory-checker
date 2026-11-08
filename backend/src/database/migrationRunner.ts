@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import type pg from 'pg';
-const migrations = [{ version: 1, file: new URL('./migrations/001_initial_schema.sql', import.meta.url) }];
+const migrations = [
+  { version: 1, file: new URL('./migrations/001_initial_schema.sql', import.meta.url) },
+  { version: 2, file: new URL('./migrations/002_item_alerts.sql', import.meta.url) },
+  { version: 3, file: new URL('./migrations/003_apple_pickup.sql', import.meta.url) },
+];
 export async function migrate(pool: pg.Pool) {
   const client = await pool.connect();
   try {

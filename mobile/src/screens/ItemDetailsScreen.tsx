@@ -48,10 +48,11 @@ export default function ItemDetailsScreen({ route, navigation }: NativeStackScre
       <Text>Target price: {item.target_price == null ? 'Not set' : `$${Number(item.target_price).toFixed(2)}`}</Text>
       {!!item.url && <Button title="Open retailer page" onPress={() => void openProduct()} />}
     </>}
-    <Text style={ui.label}>Price history</Text>
-    {!prices.length && <Text>No prices recorded yet.</Text>}
-    {prices.map((price, index) => <Text key={index}>
-      ${Number(price.price).toFixed(2)} · {price.checked_at || price.recorded_at ? new Date(price.checked_at ?? price.recorded_at!).toLocaleString() : 'Recorded'}
+    <Text style={ui.label}>Stock and price history</Text>
+    {!prices.length && <Text>No checks recorded yet.</Text>}
+    {prices.map(price => <Text key={price.id}>
+      {item?.fulfillment === 'pickup' ? price.in_stock ? 'Pickup available' : 'No pickup availability' : price.in_stock ? 'In stock' : 'Out of stock'} · {price.price == null ? 'Price unavailable' : `$${Number(price.price).toFixed(2)}`} · {new Date(price.checked_at).toLocaleString()}
+      {price.pickup_stores?.filter(store => store.available).map(store => `\n${store.name} · ${store.distance_miles.toFixed(1)} mi`).join('')}
     </Text>)}
     <Button title="Refresh" onPress={() => void load()} disabled={busy} />
     <Button title="Delete item" color="#a21919" onPress={remove} disabled={busy || !item} />

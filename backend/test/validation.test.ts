@@ -24,6 +24,35 @@ test('preferences and notifications reject coercion and invalid updates', () => 
   assert.equal(readNotification.safeParse({ read: false }).success, false);
   assert.equal(deviceToken.safeParse({ token: '' }).success, false);
 });
+test('item alert options accept stock-only, price-only, both, and legacy clients', () => {
+  const source = { retailer: 'bestbuy', sku: '12345' };
+  assert.deepEqual(newItem.parse(source), { ...source, notify_stock: true, notify_price: false, fulfillment: 'shipping' });
+  assert.equal(newItem.parse({ ...source, target_price: 100 }).notify_price, true);
+  assert.equal(newItem.safeParse({ ...source, notify_stock: false, notify_price: true, target_price: 0 }).success, true);
+  assert.equal(newItem.safeParse({ ...source, notify_stock: true, notify_price: true, target_price: 100 }).success, true);
+  for (const flags of [
+    { notify_stock: false, notify_price: false },
+    { notify_stock: false },
+    { notify_price: true },
+    { notify_stock: 'true' },
+    { notify_price: 'false' },
+  ]) assert.equal(newItem.safeParse({ ...source, ...flags }).success, false);
+});
+test('Apple pickup requires a ZIP and exact product URL, defaults to 50 miles, and preserves leading zeros', () => {
+  const source = { retailer: 'apple', url: 'https://www.apple.com/shop/buy-iphone/iphone-duo/7.6-inch-display-256gb-night-sky-att',
+    fulfillment: 'pickup', pickup_zip: '02108' };
+  const parsed = newItem.parse(source);
+  assert.equal(parsed.pickup_zip, '02108');
+  assert.equal(parsed.pickup_radius_miles, 50);
+  for (const radius of [1, 50, 250]) assert.equal(newItem.safeParse({ ...source, pickup_radius_miles: radius }).success, true);
+  for (const invalid of [
+    { pickup_zip: undefined }, { pickup_zip: '1234' }, { pickup_zip: '123456' }, { pickup_zip: 2108 },
+    { pickup_radius_miles: 0 }, { pickup_radius_miles: 251 }, { pickup_radius_miles: 2.5 },
+    { pickup_radius_miles: '50' }, { retailer: 'amazon' }, { url: undefined },
+    { fulfillment: 'shipping' },
+  ]) assert.equal(newItem.safeParse({ ...source, ...invalid }).success, false);
+  assert.equal(newItem.safeParse({ retailer: 'apple', model: 'iPhone', pickup_radius_miles: 50 }).success, false);
+});
 test('environment requires strong JWT and valid cron', () => {
   const env = { DATABASE_URL: 'postgresql://localhost/db', REDIS_URL: 'redis://localhost', JWT_SECRET: 'a'.repeat(64) };
   assert.equal(parseConfig(env).PORT, 3000);

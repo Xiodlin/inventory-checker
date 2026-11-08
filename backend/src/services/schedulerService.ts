@@ -10,14 +10,8 @@ import type { JsonCache } from './cacheService.js';
 import type { Realtime } from './websocketService.js';
 import type { PushService } from './notificationService.js';
 
-export function notificationReason(item: Item, result: InventoryResult): string | null {
-  const backInStock = item.in_stock === false && result.in_stock;
-  const hitsTarget = result.in_stock && item.target_price !== null && result.price <= item.target_price
-    && (item.current_price === null || item.current_price > item.target_price || result.price < item.current_price || backInStock);
-  if (hitsTarget) return `Price is ${result.price.toFixed(2)}, at or below your target of ${item.target_price!.toFixed(2)}.`;
-  if (backInStock) return 'Your tracked item is back in stock.';
-  return null;
-}
+import { notificationReason } from '@inventory-checker/core';
+export { notificationReason } from '@inventory-checker/core';
 
 export class Scheduler {
   private running?: Promise<void>;
@@ -42,12 +36,13 @@ export class Scheduler {
     for (const item of due.rows) {
       if (this.stopped) break;
       try {
-        const cacheKey = `inventory:v1:${item.retailer}:${item.sku ?? item.id}`;
+        const cacheKey = `inventory:v3:${item.retailer}:${item.id}`;
         let result = await this.cache.get<InventoryResult>(cacheKey);
         if (!result) {
           result = await checkInventory(item, this.config.BESTBUY_API_KEY);
           await this.cache.set(cacheKey, result, 60);
         }
+        if (item.fulfillment === 'pickup' && !result.pickup_stores) throw new Error('Pickup check did not return store availability');
         await this.persistResult(item, result);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Inventory check failed';
@@ -68,12 +63,19 @@ export class Scheduler {
       const locked = await client.query<Item>('SELECT * FROM tracked_items WHERE id=$1 AND user_id=$2 FOR UPDATE', [item.id, item.user_id]);
       const current = locked.rows[0];
       if (!current) { await client.query('COMMIT'); return; }
+      const stores = result.pickup_stores ?? [];
+      const previousStores = current.pickup_stores ?? [];
+      const storesChanged = previousStores.length !== stores.length || stores.some(store =>
+        !previousStores.some(previous => previous.id === store.id && previous.available === store.available
+          && previous.name === store.name && previous.distance_miles === store.distance_miles));
       updated = (await client.query<Item>(
-        'UPDATE tracked_items SET current_price=$1,in_stock=$2,last_checked_at=now(),last_check_error=NULL WHERE id=$3 RETURNING *',
-        [result.price, result.in_stock, item.id],
+        'UPDATE tracked_items SET current_price=$1,in_stock=$2,pickup_stores=$3,last_checked_at=now(),last_check_error=NULL WHERE id=$4 RETURNING *',
+        [result.price, result.in_stock, JSON.stringify(stores), item.id],
       )).rows[0];
-      if (current.current_price !== result.price || current.in_stock !== result.in_stock) {
-        await client.query('INSERT INTO price_history(id,item_id,price,in_stock) VALUES($1,$2,$3,$4)', [randomUUID(), item.id, result.price, result.in_stock]);
+      if (current.current_price !== result.price || current.in_stock !== result.in_stock
+          || storesChanged) {
+        await client.query('INSERT INTO price_history(id,item_id,price,in_stock,pickup_stores) VALUES($1,$2,$3,$4,$5)',
+          [randomUUID(), item.id, result.price, result.in_stock, JSON.stringify(stores)]);
       }
       const preference = await client.query<{ notifications_enabled: boolean }>('SELECT notifications_enabled FROM settings WHERE user_id=$1', [item.user_id]);
       const reason = notificationReason(current, result);

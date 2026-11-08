@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import { errorMessage, request } from '../api';
+import { errorMessage, localApi } from '../api';
 import type { Item, PricePoint } from '../types';
 
 const money = (value?: number | null) =>
   value == null ? 'Not checked' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-export default function Dashboard({ items, token, onDelete }: {
-  items: Item[]; token: string; onDelete(id: Item['id']): Promise<void>;
+export default function Dashboard({ items, onDelete }: {
+  items: Item[]; onDelete(id: Item['id']): Promise<void>;
 }) {
   const [selected, setSelected] = useState<Item | null>(null);
   const [prices, setPrices] = useState<PricePoint[]>([]);
@@ -18,7 +18,7 @@ export default function Dashboard({ items, token, onDelete }: {
     const current = ++historyRequest.current;
     setSelected(item); setLoading(true); setError(''); setPrices([]);
     try {
-      const result = await request<PricePoint[]>(`/api/items/${encodeURIComponent(item.id)}/prices`, token);
+      const result = await localApi().prices(item.id);
       if (current === historyRequest.current) setPrices(result);
     }
     catch (failure) { if (current === historyRequest.current) setError(errorMessage(failure)); }
@@ -37,15 +37,24 @@ export default function Dashboard({ items, token, onDelete }: {
         <tbody>{items.map(item => <tr key={item.id}>
           <td><strong>{item.model || item.sku || 'Product'}</strong><small>{item.brand || '—'}{item.sku ? ` · ${item.sku}` : ''}</small></td>
           <td className="retailer">{item.retailer === 'bestbuy' ? 'Best Buy' : item.retailer}</td>
-          <td><span className={`badge ${item.in_stock ? 'success' : ''}`}>{item.in_stock == null ? 'Pending check' : item.in_stock ? 'In stock' : 'Out of stock'}</span></td>
-          <td>{money(item.current_price)}<small>Target: {item.target_price == null ? '—' : money(item.target_price)}</small></td>
+          <td><span className={`badge ${item.in_stock ? 'success' : ''}`}>{item.in_stock == null ? item.last_check_error ? 'Availability unknown' : 'Pending check' : item.fulfillment === 'pickup' ? item.in_stock ? 'Pickup available' : 'No pickup availability' : item.in_stock ? 'In stock' : 'Out of stock'}</span>
+            <small>{item.fulfillment === 'pickup' ? `Pickup near ${item.pickup_zip} · ${item.pickup_radius_miles} mi` : 'Online / shipping'}</small>
+            {item.fulfillment === 'pickup' && item.pickup_stores.map(store => <small key={store.id}>{store.name} · {store.distance_miles.toFixed(1)} mi · {store.available ? 'Pickup available' : 'Unavailable for pickup'}</small>)}
+            {item.fulfillment === 'pickup' && item.last_checked_at && !item.last_check_error && item.pickup_stores.length === 0 && <small>No returned stores within your radius.</small>}
+            <small>Alerts: {[item.notify_stock && 'In stock', item.notify_price && 'Target price'].filter(Boolean).join(' + ')}</small>
+            <small>Last checked: {item.last_checked_at ? new Date(item.last_checked_at).toLocaleString() : 'Not yet'}</small>
+            {item.last_check_error && <small role="alert">Check failed: {item.last_check_error}{item.in_stock != null ? ' (Showing last known stock.)' : ''}</small>}
+          </td>
+          <td>{item.current_price == null ? 'Price unavailable' : money(item.current_price)}<small>Target: {!item.notify_price || item.target_price == null ? '—' : money(item.target_price)}</small></td>
           <td><div className="actions"><button onClick={() => void details(item)}>Details</button><button className="danger" disabled={deleting === item.id} onClick={() => void remove(item)}>{deleting === item.id ? 'Removing…' : 'Remove'}</button></div></td>
         </tr>)}</tbody></table></div>}
     {selected && <div className="history">
-      <div className="section-heading"><h3>{selected.model || selected.sku || 'Product'} · price history</h3><button onClick={() => { historyRequest.current++; setSelected(null); }}>Close details</button></div>
+      <div className="section-heading"><h3>{selected.model || selected.sku || 'Product'} · stock and price history</h3><button onClick={() => { historyRequest.current++; setSelected(null); }}>Close details</button></div>
       <p className="muted">SKU: {selected.sku || '—'} · URL: {selected.url || '—'}</p>
-      {loading ? <p role="status">Loading history…</p> : prices.length === 0 ? <p className="muted">No price checks recorded yet.</p> :
-        <ul className="history-list">{prices.map((point, index) => <li key={index}><span>{point.recorded_at || point.checked_at || point.created_at || 'Recorded check'}</span><strong>{money(point.price)}</strong></li>)}</ul>}
+      {loading ? <p role="status">Loading history…</p> : prices.length === 0 ? <p className="muted">No checks recorded yet.</p> :
+        <ul className="history-list">{prices.map(point => <li key={point.id}><span>{point.checked_at}</span><span>{selected.fulfillment === 'pickup' ? point.in_stock ? 'Pickup available' : 'No pickup availability' : point.in_stock ? 'In stock' : 'Out of stock'}
+          {point.pickup_stores?.filter(store => store.available).map(store => <small key={store.id}>{store.name} · {store.distance_miles.toFixed(1)} mi</small>)}
+        </span><strong>{point.price == null ? 'Price unavailable' : money(point.price)}</strong></li>)}</ul>}
     </div>}
     {error && <p role="alert" className="error">{error}</p>}
   </section>;

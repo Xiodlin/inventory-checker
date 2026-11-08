@@ -14,6 +14,9 @@ test('migration reads SQL asset under transactional advisory lock and tracks its
   assert.equal(queries[0], 'BEGIN');
   assert.match(queries[1], /pg_advisory_xact_lock/);
   assert.ok(queries.some(sql => sql.includes('CREATE TABLE tracked_items')));
+  assert.ok(queries.some(sql => sql.includes('UPDATE tracked_items SET notify_price = true WHERE target_price IS NOT NULL')));
+  assert.ok(queries.some(sql => sql.includes('ALTER COLUMN price DROP NOT NULL')));
+  assert.ok(queries.some(sql => sql.includes('tracked_items_pickup_location')));
   assert.ok(queries.some(sql => sql.includes('INSERT INTO schema_migrations')));
   assert.equal(queries.at(-1), 'COMMIT');
   assert.equal(released, true);

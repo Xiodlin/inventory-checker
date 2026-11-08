@@ -1,6 +1,7 @@
-import type { Item, NewItem, LocalNotification, LocalSettings, PricePoint, MonitorStatus, CheckResult } from '@inventory-checker/core';
+import type { Item, NewItem, LocalNotification, LocalSettings, PricePoint, MonitorStatus, CheckResult, ShoppingWatch } from '@inventory-checker/core';
 import type { ShoppingInput, ShoppingSearch } from '../main/shoppingTypes';
 export type { ShoppingInput, ShoppingSearch, ShoppingOffer } from '../main/shoppingTypes';
+export type { ShoppingWatch } from '@inventory-checker/core';
 export type { Item, NewItem, PricePoint };
 export type InventoryNotification = LocalNotification;
 export type SettingsData = LocalSettings;
@@ -24,6 +25,9 @@ export interface DesktopApi {
   shoppingSearch(input: ShoppingInput): Promise<ShoppingSearch>;
   shoppingHistory(): Promise<ShoppingSearch[]>;
   clearShoppingHistory(): Promise<void>;
+  shoppingWatches(): Promise<ShoppingWatch[]>;
+  saveShoppingWatch(input: ShoppingInput): Promise<void>;
+  removeShoppingWatch(id: string): Promise<void>;
   exportBackup(): Promise<boolean>;
   importBackup(): Promise<boolean>;
   onChanged(callback: () => void): () => void;

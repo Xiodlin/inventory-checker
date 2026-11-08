@@ -20,7 +20,7 @@ function restore(): void {
   window?.focus();
 }
 function check(): void {
-  void service?.monitor.tick().catch(error => {
+  void service?.checkDue().catch(error => {
     console.error('Local monitoring failed:', error instanceof Error ? error.message : 'Unknown error');
     window?.webContents.send('inventory:changed');
   });
@@ -91,7 +91,7 @@ else {
     ]));
     tray.on('click', restore);
     timer = setInterval(check, 60000);
-    powerMonitor.on('suspend', () => { clearInterval(timer); service?.monitor.cancelRun(); service?.shopping.cancel(); });
+    powerMonitor.on('suspend', () => { clearInterval(timer); service?.cancelChecks(); });
     powerMonitor.on('resume', () => { clearInterval(timer); timer = setInterval(check, 60000); check(); });
     check();
   }).catch(error => {

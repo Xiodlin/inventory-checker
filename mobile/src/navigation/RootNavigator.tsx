@@ -4,9 +4,10 @@ import Dashboard from '../screens/DashboardScreen';
 import AddItem from '../screens/AddItemScreen';
 import ItemDetails from '../screens/ItemDetailsScreen';
 import Settings from '../screens/SettingsScreen';
+import Shopping from '../screens/ShoppingScreen';
 
 export type RootStackParamList = {
-  Dashboard: undefined; AddItem: undefined; ItemDetails: { id: string }; Settings: undefined;
+  Dashboard: undefined; AddItem: undefined; ItemDetails: { id: string }; Settings: undefined; Shopping: undefined;
 };
 const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function RootNavigator() {
@@ -15,5 +16,6 @@ export default function RootNavigator() {
     <Stack.Screen name="AddItem" component={AddItem} options={{ title: 'Add item' }} />
     <Stack.Screen name="ItemDetails" component={ItemDetails} options={{ title: 'Item details' }} />
     <Stack.Screen name="Settings" component={Settings} />
+    <Stack.Screen name="Shopping" component={Shopping} options={{ title: 'Find this product' }} />
   </Stack.Navigator></NavigationContainer>;
 }

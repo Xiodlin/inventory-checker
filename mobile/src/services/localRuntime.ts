@@ -4,7 +4,8 @@ import { randomUUID } from 'expo-crypto';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
-import { checkInventory, LocalMonitor, LocalStore, type SqlConnection, type SqlDatabase, type SqlValue } from '@inventory-checker/core';
+import { checkInventory, LocalMonitor, LocalStore, ShoppingMonitor, type SqlConnection, type SqlDatabase, type SqlValue } from '@inventory-checker/core';
+import { shoppingBrowser } from './shoppingBrowser';
 
 function connection(database: SQLiteDatabase): SqlConnection {
   return {
@@ -43,7 +44,7 @@ function adapter(database: SQLiteDatabase): SqlDatabase {
 const keyName = 'inventory-checker.bestbuy-key';
 const listeners = new Set<() => void>();
 const changed = () => { for (const listener of listeners) listener(); };
-let runtime: Promise<{ store: LocalStore; monitor: LocalMonitor }> | undefined;
+let runtime: Promise<{ store: LocalStore; monitor: LocalMonitor; shopping: ShoppingMonitor }> | undefined;
 export function subscribeLocal(listener: () => void) {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
@@ -74,7 +75,8 @@ export function localRuntime() {
           trigger: Platform.OS === 'android' ? { channelId: 'inventory' } : null,
         });
       }, changed, (item, key) => checkInventory(item, key, fetch));
-      return { store, monitor };
+      const shopping = new ShoppingMonitor(store, randomUUID, input => shoppingBrowser.search(input), changed);
+      return { store, monitor, shopping };
     })().catch(error => { runtime = undefined; throw error; });
   }
   return runtime;

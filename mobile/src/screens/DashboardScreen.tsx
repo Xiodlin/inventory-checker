@@ -39,6 +39,7 @@ export default function DashboardScreen({ navigation }: NativeStackScreenProps<R
     <Header title="Your inventory" subtitle="Stored on this device. Checks need internet, not a server." />
     <View style={ui.row}><Button title="Add item" onPress={() => navigation.navigate('AddItem')} />
       <Button title="Settings" onPress={() => navigation.navigate('Settings')} /></View>
+    <Button title="Find this product" onPress={() => navigation.navigate('Shopping')} />
     <Button title={checking ? 'Checking…' : 'Check now'} disabled={checking} onPress={() => {
       setChecking(true); setCheckMessage('');
       void apiService.check().then(async result => {

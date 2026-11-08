@@ -52,7 +52,7 @@ npm run dev:mobile
 ```
 
 **Rebuild any previously installed mobile client:** this conversion adds native
-SQLite, notification, background-task, secure-storage, and backup modules.
+SQLite, notification, background-task, secure-storage, backup, and shopping WebView modules.
 No mobile/desktop `.env` file or API URL is required. Old API/Firebase environment
 values are no longer used. Metro is development tooling, not an inventory backend;
 a distributed production build bundles the application itself.
@@ -99,18 +99,20 @@ while enabled; OS delivery and crash recovery are not exactly-once guarantees.
 
 Choose stock alerts, target-price alerts, or both for each product.
 
-### Experimental desktop shopping discovery
+### Experimental shopping discovery and search alerts
 
-**Find this product** in the desktop sidebar performs a manual Google Shopping
+**Find this product** in the desktop sidebar or mobile dashboard performs a Google Shopping
 search without an API key. Enter a product/model and required variant phrases
 (for example `MacBook Neo` and `256GB, Indigo`). An optional example URL is a saved
 reference only: this prototype does not fetch it or infer specifications from it.
 
-A separate sandboxed browser renders normal Google results. It has no application
+A separate browser renders normal Google results: sandboxed Electron on desktop,
+an incognito native WebView while the mobile app is open. It has no application
 preload, Node access, sign-in session, download permission, or access to the local
 app's IPC bridge. It does not click purchase controls or automate CAPTCHA/consent.
 Navigation stays on Google's search/product pages. Cookies/cache are cleared after
-each search; the latest **20** search results or errors are retained in local SQLite.
+each desktop search; the mobile private WebView is removed after each search.
+The latest **20** desktop search outcomes are retained in local SQLite.
 Use **Clear shopping search history** to remove them. This history is not included
 in watchlist backups. Google receives the search, network address, and browser
 requests; on-device storage does not mean offline or third-party-free processing.
@@ -122,13 +124,45 @@ not proof of an exact SKU: uncertain variants, accessories, and used/refurbished
 listings are separated. Stock requires an explicit visible stock/pickup label;
 a price, delivery estimate, or ordinary listing alone leaves availability unknown.
 All availability is **Google-reported**, never retailer-verified. Offers are not
-automatically added to the watchlist and do not trigger native alerts.
+automatically added to the retailer watchlist.
+Results, saved alerts, and recent history have separate panels. Expand an offer's
+**Offer link**, then click its URL field to select the complete link for copying.
+Alert behavior and retention details are available in expandable help sections.
 
-This is manual-only, desktop-only, with a 30-second timeout. Existing automatic
-retailer checks are unchanged. Live Google testing encountered unusual-traffic/
-verification blocking; extraction and matching passed controlled rendered-page
-tests, but successful live offer extraction is **not yet verified**. Google's
-layouts and access policies can change. Blocked, consent, unsupported, and
+Use **Save search for stock alerts** even before a successful search or when no
+required-text match was found. Saved searches recheck using the **same interval in
+Settings as retailer checks** (15 minutes by default). Automatic search checks
+respect the background-checks toggle. One oldest due search runs per minute tick,
+so large lists may check later than the configured interval.
+
+- **Desktop:** runs while the app is open or in the tray and the computer is awake.
+- **Mobile:** Google checks run **only while the app is open and active**. They are
+  not part of iOS/Android background tasks and cannot check while suspended or
+  sleeping. Due searches catch up on reopening. Existing direct retailer
+  background checks are unchanged.
+- An alert is saved in **Notifications** only when a required-text match explicitly
+  reports stock/pickup. New such matches and matches returning after a successful
+  absence trigger alerts. Uncertain variants/accessories and unknown stock do not.
+  Unchanged listings, price changes, and Google tracking-link changes do not
+  repeat stock alerts. A temporarily missing stock label on the same match does
+  not reset its alert baseline. Device delivery uses existing permission and notification
+  Settings; failed delivery stays in the durable queue.
+- Failed/blocked searches retain the last successful result and alert baseline,
+  show their error/attempt time, and retry when next due. They do not mean no stock.
+- Saved searches and their last successful results remain on-device until
+  **Delete saved search**. Clearing recent history does not stop them. Alerts remain
+  even after deleting a search. Searches are excluded from watchlist backups; alerts
+  use the existing backup policy. Devices do not synchronize.
+
+Each search has a 30-second timeout. Existing automatic
+retailer checks are unchanged. Live Google offer extraction has been verified
+after fixing premature cancellation during Google's normal search-page reload.
+Controlled rendered-page tests cover interrupted loads, matching, HTTP errors,
+and denied redirects. Other live testing encountered unusual-traffic/verification
+blocking; a successful search does not guarantee continued access. Google's
+layouts and access policies can change. Mobile native rendering and foreground
+behavior still require validation on real devices; desktop success does not
+guarantee the mobile layout is readable. Blocked, consent, unsupported, and
 unreadable pages produce explicit errors—not successful empty-stock results.
 
 | Retailer | Input and requirements |

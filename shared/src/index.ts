@@ -3,6 +3,8 @@ export * from './validation';
 export * from './alerts';
 export * from './localStore';
 export * from './monitor';
+export * from './shopping';
+export * from './shoppingMonitor';
 export * from './backup';
 export * from './scrapers/baseScraper';
 export * from './scrapers/index';

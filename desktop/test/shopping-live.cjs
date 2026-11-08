@@ -4,6 +4,19 @@ const { LocalStore } = require('@inventory-checker/core');
 const { ShoppingService } = require('../dist/main/shoppingService');
 const { randomUUID } = require('node:crypto');
 app.on('window-all-closed', () => {});
+app.on('web-contents-created', (_event, contents) => {
+  const location = value => {
+    try { const url = new URL(value); return `${url.origin}${url.pathname}`; }
+    catch { return 'unavailable'; }
+  };
+  for (const name of ['will-navigate', 'will-redirect', 'did-start-navigation', 'did-navigate']) {
+    contents.on(name, (_event, url) => console.log(name, location(url)));
+  }
+  contents.on('did-fail-load', (_event, code, description, url, mainFrame) => {
+    if (mainFrame) console.log('did-fail-load', code, description, location(url));
+  });
+  contents.on('dom-ready', () => console.log('dom-ready', location(contents.getURL())));
+});
 app.whenReady().then(async () => {
   const db = new DesktopDatabase(':memory:');
   const service = new ShoppingService(db);

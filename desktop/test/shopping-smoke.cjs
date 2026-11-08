@@ -2,6 +2,8 @@ const assert = require('node:assert/strict');
 const { app, BrowserWindow } = require('electron');
 const { resolve } = require('node:path');
 const { readFileSync } = require('node:fs');
+const { transformFileSync } = require('@babel/core');
+const { runInNewContext } = require('node:vm');
 const { DesktopDatabase } = require('../dist/main/database');
 const { LocalStore } = require('@inventory-checker/core');
 const { randomUUID } = require('node:crypto');
@@ -39,16 +41,49 @@ app.whenReady().then(async () => {
   const getURL = prototype.getURL;
   const searches = new Set();
   let blocked = false;
+  let navigationScenario;
+  let interruptedLoads = 0;
   const db = new DesktopDatabase(':memory:');
   const shopping = new ShoppingService(db);
   try {
     await new LocalStore(db, randomUUID).initialize();
+    await host.loadURL(`data:text/html,${encodeURIComponent(readFileSync(resolve(__dirname, 'shopping-fixture.html'), 'utf8'))}`);
+    for (const platform of ['ios', 'android']) {
+      const compiled = transformFileSync(resolve(__dirname, '../../shared/src/shopping.ts'), {
+        babelrc: false, configFile: false, presets: [['babel-preset-expo', { platform }]],
+        caller: { name: 'metro', platform, supportsStaticESM: false },
+      });
+      const exports = {};
+      runInNewContext(compiled.code, { exports, require, URL });
+      const cards = await host.webContents.executeJavaScript(`(${exports.extractShoppingCards.toString()})()`);
+      assert.equal(matchShoppingCards(cards, input).length, 4, `${platform} native transpilation must still execute in the isolated page`);
+    }
     prototype.loadURL = function (url, ...args) {
       if (!String(url).startsWith('https://www.google.com/search')) return loadURL.call(this, url, ...args);
       searches.add(this);
       assert.equal(this.getLastWebPreferences().sandbox, true);
       assert.equal(this.getLastWebPreferences().nodeIntegration, false);
       assert.equal(this.getLastWebPreferences().preload, undefined);
+      if (navigationScenario) {
+        this.session.protocol.handle('https', request => {
+          const url = new URL(request.url);
+          if (url.pathname === '/pending') {
+            return new Promise(resolve => setTimeout(() => resolve(new Response(null, { status: 204 })), 500));
+          }
+          if (url.searchParams.has('reloaded')) {
+            return new Response(readFileSync(resolve(__dirname, 'shopping-fixture.html'), 'utf8'),
+              { status: navigationScenario === 'http-error' ? 429 : 200, headers: { 'content-type': 'text/html' } });
+          }
+          const destination = navigationScenario === 'blocked-redirect'
+            ? 'https://www.google.com/sorry/index' : 'https://www.google.com/search?reloaded=1';
+          return new Response(`<img src="/pending"><script>setTimeout(() => location.replace(${JSON.stringify(destination)}), 0)</script>`,
+            { headers: { 'content-type': 'text/html' } });
+        });
+        return loadURL.call(this, url, ...args).catch(error => {
+          if (error.code === 'ERR_ABORTED' || error.message.includes('ERR_ABORTED')) interruptedLoads++;
+          throw error;
+        });
+      }
       if (blocked) return loadURL.call(this, 'data:text/html,<p>Our systems detected unusual traffic</p>');
       return loadURL.call(this, `data:text/html,${encodeURIComponent(readFileSync(resolve(__dirname, 'shopping-fixture.html'), 'utf8'))}`);
     };
@@ -73,6 +108,20 @@ app.whenReady().then(async () => {
     assert.match(failure.error, /verification/);
     assert.equal(failure.offers.length, 0);
     assert.equal((await shopping.history()).length, 2);
+    navigationScenario = 'reload';
+    const reloaded = await shopping.search(input);
+    assert.equal(reloaded.error, null, 'an ordinary search-page reload must finish before extracting offers');
+    assert.equal(reloaded.offers.length, 4);
+    assert.ok(interruptedLoads > 0, 'the fixture must reproduce Electron ERR_ABORTED during script navigation');
+    navigationScenario = 'http-error';
+    const httpFailure = await shopping.search(input);
+    assert.match(httpFailure.error, /HTTP 429/);
+    assert.equal(httpFailure.offers.length, 0);
+    navigationScenario = 'blocked-redirect';
+    const redirected = await shopping.search(input);
+    assert.match(redirected.error, /verification/);
+    assert.equal(redirected.offers.length, 0);
+    navigationScenario = undefined;
     for (let index = 0; index < 20; index++) {
       await db.run('INSERT INTO shopping_searches(id,checked_at,result) VALUES(?,?,?)',
         [`old-${index}`, '2000-01-01T00:00:00.000Z', JSON.stringify(result)]);

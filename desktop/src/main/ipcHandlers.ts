@@ -19,13 +19,16 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null, rende
       case 'save-settings': return service.store.saveSettings(payload);
       case 'status': return service.store.status();
       case 'check': return service.monitor.checkNow();
-      case 'check-due': return service.monitor.tick();
+      case 'check-due': return service.checkDue();
       case 'save-key': return service.saveKey(payload);
       case 'has-key': return Boolean(await service.getKey());
       case 'test-notification': return service.testNotification();
       case 'shopping-search': return service.shopping.search(payload);
       case 'shopping-history': return service.shopping.history();
       case 'shopping-clear': return service.shopping.clearHistory();
+      case 'shopping-watches': return service.shoppingMonitor.watches();
+      case 'shopping-save-watch': return service.shoppingMonitor.save(payload);
+      case 'shopping-remove-watch': if (typeof payload === 'string') return service.shoppingMonitor.remove(payload); break;
       case 'export': {
         const selected = await dialog.showSaveDialog(window, { defaultPath: 'inventory-backup.json', filters: [{ name: 'JSON backup', extensions: ['json'] }] });
         if (selected.canceled || !selected.filePath) return false;

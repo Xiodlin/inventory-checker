@@ -94,17 +94,39 @@ same format without deleting the original PostgreSQL data.
 
 ## Sleep and deployment limits
 
-Desktop shopping discovery is separate from the shared retailer monitor. A
-short-lived sandboxed Electron window loads Google Shopping on a manual request.
+Shopping discovery uses shared visible-card extraction/matching and a separate
+portable `ShoppingMonitor`. Manual or scheduled desktop searches load Google
+Shopping in a short-lived sandboxed Electron window.
 It has an ephemeral session, no preload/Node access, denied permissions/downloads,
 restricted navigation, and no automatic interaction with consent/CAPTCHA controls.
 Only visible offer cards with titles and unambiguous prices are extracted. Required
 title phrases, accessory/condition checks, and explicit availability labels produce
 reported or uncertain matches, not verified retailer stock. The latest 20 outcomes
-are stored in a desktop-only SQLite table and can be cleared from the UI; they do
-not change watchlists, backups, or notification rules. Suspension cancels the
-window and shutdown waits for cleanup. Live Google access has been blocked in
-testing, so successful live extraction is not promised.
+are stored in a desktop-only SQLite table and can be cleared from the UI.
+Both clients persist saved inputs, latest successful outcomes, errors/attempt times,
+and stock-alert deduplication in `shopping_watches`. Due searches use retailer
+Settings and the automatic-check toggle; at most one oldest due search runs per
+foreground/desktop minute tick. Explicitly in-stock required-text matches create
+alerts atomically with the saved observation in the existing notification queue.
+Identity uses title/seller, not ephemeral Google tracking URLs or prices.
+Errors retain previous stock and results. Deleting a watch during a check prevents
+its result/alerts from being committed. Searches are not in portable backups;
+their alerts use the existing alert backup/delivery policies. Suspension cancels the
+window and shutdown waits for cleanup. Electron's initial load can be interrupted
+by Google's ordinary client-side search navigation; extraction waits for an allowed
+main-frame navigation to finish within the existing timeout. HTTP errors and denied
+redirects still stop the search. Live offer extraction has succeeded, but Google has
+also blocked other probes, so continued access is not promised.
+
+Mobile mounts an ephemeral incognito native WebView only for an active search.
+Remote messages are accepted only from allowed Google pages and visible-card data
+is schema-validated before matching. Navigation, files, popups, geolocation, and
+shared login cookies are restricted. DOM extraction is kept free of transpiler
+helpers so its serialized function can execute inside the WebView.
+Leaving the foreground cancels the search and its pending monitoring update.
+Google shopping is **not** invoked by the headless BackgroundTask: rendering a
+WebView in a suspended mobile app is not reliable. Direct retailer background
+monitoring remains unchanged.
 
 Desktop cannot run network checks during actual system sleep. Mobile requests an
 inexact background delay of at least 15 minutes; the OS may run much later or not at

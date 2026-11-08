@@ -124,7 +124,7 @@ app.whenReady().then(async () => {
       service.shopping.search = async input => {
         savedSearch = { id: 'shopping-fixture', input, checked_at: new Date().toISOString(), error: null,
           offers: [
-            { title: 'MacBook Neo 256GB Indigo', seller: 'Target', price: '$699.99', url: 'https://www.target.com/p/-/A-91122045',
+            { title: 'MacBook Neo 256GB Indigo', seller: 'Target', price: '$699.99', url: 'https://www.google.com/aclk?tracking=' + 'long-tracking-value'.repeat(80),
               match: 'text-match', missing: [], availability: 'reported-in-stock', availability_text: 'Pickup today' },
             { title: 'MacBook Neo case', seller: 'Best Buy', price: '$49.99', url: 'https://www.bestbuy.com/site/case/12345.p',
               match: 'uncertain', missing: ['Product, not an accessory'], availability: 'unknown', availability_text: 'No unambiguous stock label' },
@@ -143,7 +143,7 @@ app.whenReady().then(async () => {
         document.querySelector('.discovery-form').requestSubmit();
         for (let attempt = 0; attempt < 50; attempt++) {
           if (document.body.innerText.includes('Found 2 readable offers.')) {
-            return { text: document.body.innerText, uncertainClosed: !document.querySelector('details').open };
+            return { text: document.body.innerText, uncertainClosed: !document.querySelector('.discovery-uncertain').open };
           }
           await new Promise(resolve => setTimeout(resolve, 20));
         }
@@ -152,7 +152,62 @@ app.whenReady().then(async () => {
       assert.match(discovery.text, /Google-reported availability/);
       assert.match(discovery.text, /not retailer-verified/);
       assert.equal(discovery.uncertainClosed, true);
+      for (const width of [1180, 900]) {
+        window.setSize(width, 900);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const layout = await window.webContents.executeJavaScript(`(async () => {
+          const sections = [...document.querySelectorAll('.discovery-section')];
+          const rects = sections.map(section => section.getBoundingClientRect());
+          const link = document.querySelector('.discovery-link');
+          const hiddenLink = !link.open;
+          link.open = true;
+          const input = link.querySelector('input');
+          input.focus();
+          input.click();
+          await new Promise(resolve => setTimeout(resolve, 20));
+          const selectable = input.selectionStart === 0 && input.selectionEnd === input.value.length;
+          const contained = input.getBoundingClientRect().right <= input.closest('.discovery-card').getBoundingClientRect().right;
+          input.blur();
+          link.open = false;
+          return { sections: sections.length, separated: rects.slice(1).every((rect, index) => rect.top - rects[index].bottom >= 20),
+            overflow: document.documentElement.scrollWidth > window.innerWidth,
+            hiddenLink, selectable, contained };
+        })()`);
+        assert.equal(layout.sections, 4);
+        assert.equal(layout.separated, true, 'results, alerts and history must have distinct panel spacing');
+        assert.equal(layout.overflow, false, 'long offer URLs must not overflow the page');
+        assert.equal(layout.hiddenLink, true, 'tracking links must be collapsed by default');
+        assert.equal(layout.selectable, true, 'clicking an offer link must select the full URL for copying');
+        assert.equal(layout.contained, true);
+      }
       assert.deepEqual(savedSearch.input.variants, ['256GB', 'Indigo']);
+      const savedWatch = await window.webContents.executeJavaScript(`(async () => {
+        [...document.querySelectorAll('button')].find(button => button.textContent === 'Save search for stock alerts').click();
+        for (let attempt = 0; attempt < 50; attempt++) {
+          if (document.body.innerText.includes('Pending check')) return true;
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        return false;
+      })()`);
+      assert.equal(savedWatch, true, 'saving from the form must persist a watch without needing a successful search');
+      assert.equal((await service.shoppingMonitor.watches()).length, 1);
+      const automaticShow = Notification.prototype.show;
+      const automaticClose = Notification.prototype.close;
+      let automaticAlerts = 0;
+      try {
+        Notification.prototype.show = function () { automaticAlerts++; setImmediate(() => this.emit('show')); };
+        Notification.prototype.close = function () { this.emit('close'); };
+        await service.store.saveSettings({ notifications_enabled: true, check_interval_minutes: 15, background_enabled: true });
+        await service.checkDue();
+        assert.equal(automaticAlerts, 1, 'scheduled saved-search checks must use native desktop notifications');
+        assert.equal((await service.store.notifications()).length, 1);
+        await service.checkDue();
+        assert.equal(automaticAlerts, 1, 'subsequent minute ticks must neither recheck early nor resend delivered alerts');
+      } finally {
+        Notification.prototype.show = automaticShow;
+        Notification.prototype.close = automaticClose;
+        await service.store.saveSettings({ notifications_enabled: false, check_interval_minutes: 15, background_enabled: true });
+      }
       service.shopping.search = async input => {
         savedSearch = { id: 'blocked-fixture', input, checked_at: new Date().toISOString(), offers: [],
           error: 'Google requires verification. Search stopped.' };
@@ -178,6 +233,9 @@ app.whenReady().then(async () => {
         return false;
       })()`);
       assert.equal(cleared, true);
+      assert.equal((await service.shoppingMonitor.watches()).length, 1, 'clearing history must not remove saved alerts');
+      await window.webContents.executeJavaScript(`window.inventoryDesktop.removeShoppingWatch(${JSON.stringify((await service.shoppingMonitor.watches())[0].id)})`);
+      assert.equal((await service.shoppingMonitor.watches()).length, 0);
     } finally {
       service.shopping.search = originalSearch;
       service.shopping.history = originalHistory;

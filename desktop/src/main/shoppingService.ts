@@ -2,13 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { BrowserWindow, session } from 'electron';
 import type { SqlDatabase } from '@inventory-checker/core';
 import { extractShoppingCards, isPublicShoppingURL, isShoppingNavigation, matchShoppingCards, shoppingBlocked, shoppingInput, shoppingURL,
-  type ShoppingCard, type ShoppingSearch } from './shoppingTypes';
+  shoppingCardsSchema, type ShoppingSearch } from './shoppingTypes';
 
 export class ShoppingService {
   private window?: BrowserWindow;
   private running?: Promise<ShoppingSearch>;
   private closed = false;
   private generation = 0;
+  get busy() { return Boolean(this.running); }
   constructor(private readonly db: SqlDatabase) {}
   private async initialize() {
     await this.db.exec(`CREATE TABLE IF NOT EXISTS shopping_searches (
@@ -62,6 +63,11 @@ export class ShoppingService {
       this.window = window;
       const page = window.webContents;
       let blockedRedirect = false;
+      page.on('did-navigate', (_event, _url, statusCode) => {
+        if (statusCode >= 400) {
+          responseFailure = `Google returned HTTP ${statusCode}. Search stopped; no verification bypass is attempted.`;
+        }
+      });
       page.setWindowOpenHandler(() => ({ action: 'deny' }));
       page.on('will-navigate', (event, url) => {
         if (!isShoppingNavigation(url)) { blockedRedirect = true; event.preventDefault(); }
@@ -77,26 +83,32 @@ export class ShoppingService {
         }, 30000);
       });
       const load = (async () => {
+        let interrupted = false;
         try { await page.loadURL(shoppingURL(input).href); }
         catch (error) {
           if (responseFailure) throw new Error(responseFailure);
           if (blockedRedirect) throw new Error('Google redirected to verification, consent, or an unsupported page. Search stopped without bypassing it.');
           if (error instanceof Error && error.message.includes('ERR_ABORTED')) {
-            throw new Error('Google interrupted or redirected the search before results could be read. No availability was inferred; no verification bypass is attempted.');
-          }
-          throw error;
+            interrupted = true;
+          } else throw error;
         }
-        if (responseFailure) throw new Error(responseFailure);
         for (let attempt = 0; attempt < 12; attempt++) {
           if (this.closed || generation !== this.generation || page.isDestroyed()) throw new Error('Shopping search was cancelled.');
+          if (responseFailure) throw new Error(responseFailure);
+          if (blockedRedirect) throw new Error('Google redirected to verification, consent, or an unsupported page. Search stopped without bypassing it.');
+          if (page.isLoadingMainFrame() || !page.getURL() || page.getURL() === 'about:blank') {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
           const text: string = await page.executeJavaScript('document.body?.innerText?.slice(0, 20000) ?? ""');
           if (shoppingBlocked(page.getURL(), text)) throw new Error('Google requires verification or consent. Search stopped; no CAPTCHA, sign-in, or consent automation is attempted.');
           if (!isShoppingNavigation(page.getURL())) throw new Error('Google redirected outside the allowed search page. Search stopped.');
-          const cards: ShoppingCard[] = await page.executeJavaScript(`(${extractShoppingCards.toString()})()`);
+          const cards = shoppingCardsSchema.parse(await page.executeJavaScript(`(${extractShoppingCards.toString()})()`));
           const offers = matchShoppingCards(cards, input);
           if (offers.length) return offers;
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
+        if (interrupted) throw new Error('Google interrupted the initial search, and no readable results appeared after waiting for its navigation. No availability was inferred.');
         throw new Error('No readable shopping offer cards were found. Google may have changed its layout or withheld results; no availability was inferred.');
       })();
       result.offers = await Promise.race([load, expired]);

@@ -37,7 +37,8 @@ export default function Dashboard({ items, onDelete, embedded = false }: {
         <tbody>{items.map(item => <tr key={item.id}>
           <td><strong>{item.model || item.sku || 'Product'}</strong><small>{item.brand || '—'}{item.sku ? ` · ${item.sku}` : ''}</small></td>
           <td className="retailer">{item.retailer === 'bestbuy' ? 'Best Buy' : item.retailer}</td>
-          <td><span className={`badge ${item.in_stock ? 'success' : ''}`}>{item.in_stock == null ? item.last_check_error ? 'Availability unknown' : 'Pending check' : item.fulfillment === 'pickup' ? item.in_stock ? 'Pickup available' : 'No pickup availability' : item.in_stock ? 'In stock' : 'Out of stock'}</span>
+          <td><div className="product-tags"><span className={`badge${item.in_stock === true ? ' success' : item.in_stock === false ? ' unavailable' : ''}`}>{item.in_stock == null ? 'Stock unknown' : item.in_stock ? 'In Stock' : 'Out of Stock'}</span>
+            {item.last_check_error && item.in_stock != null && <span className="badge">Last known</span>}</div>
             <small>{item.fulfillment === 'pickup' ? `Pickup near ${item.pickup_zip} · ${item.pickup_radius_miles} mi` : 'Online / shipping'}</small>
             {item.fulfillment === 'pickup' && item.pickup_stores.map(store => <small key={store.id}>{store.name} · {store.distance_miles.toFixed(1)} mi · {store.available ? 'Pickup available' : 'Unavailable for pickup'}</small>)}
             {item.fulfillment === 'pickup' && item.last_checked_at && !item.last_check_error && item.pickup_stores.length === 0 && <small>No returned stores within your radius.</small>}

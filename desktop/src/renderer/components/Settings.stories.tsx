@@ -27,12 +27,14 @@ export const SavesPreferences: Story = {
   },
 };
 
-export const KeyHelpDialog: Story = {
+export const CompactSections: Story = {
   play: async ({ canvas, userEvent }) => {
-    await userEvent.click(canvas.getByRole('button', { name: 'How to get a key' }));
-    const dialog = canvas.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toHaveAccessibleName('How to get a Best Buy API key');
-    await userEvent.click(canvas.getByRole('button', { name: 'Close' }));
+    await expect(canvas.queryByLabelText('Best Buy API key')).not.toBeInTheDocument();
+    const backup = canvas.getByRole('button', { name: 'Export local backup', hidden: true });
+    await expect(backup).not.toBeVisible();
+    await userEvent.click(canvas.getByText('Backups & local data'));
+    await expect(backup).toBeVisible();
+    await userEvent.click(canvas.getByText('Backups & local data'));
+    await expect(backup).not.toBeVisible();
   },
 };

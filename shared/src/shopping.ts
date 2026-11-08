@@ -21,12 +21,109 @@ export interface ShoppingOffer {
   availability_text: string;
   match: 'text-match' | 'uncertain'; missing: string[];
   details?: string[];
+  sale_text?: string;
   verification?: { status: 'verified' | 'failed' | 'unsupported' | 'skipped'; message: string;
     url?: string; in_stock?: boolean; price?: number | null };
 }
 export interface ShoppingSearch {
   id: string; input: ShoppingInput; checked_at: string;
   offers: ShoppingOffer[]; error: string | null;
+}
+
+export const offerSortOptions = [
+  { value: 'source', label: 'Original order' },
+  { value: 'price-asc', label: 'Price: low to high' },
+  { value: 'price-desc', label: 'Price: high to low' },
+] as const;
+export const sellerFilterOptions = [
+  { value: 'all', label: 'All sellers' },
+  { value: 'verified', label: 'Verified retailer pages' },
+  { value: 'recognized', label: 'Recognized domain or name' },
+  { value: 'unassessed', label: 'Unassessed sellers' },
+] as const;
+export type OfferSort = typeof offerSortOptions[number]['value'];
+export type SellerFilter = typeof sellerFilterOptions[number]['value'];
+export interface OfferView { sort: OfferSort; seller: SellerFilter }
+export const defaultOfferView: OfferView = { sort: 'source', seller: 'all' };
+
+const retailerDomains = ['amazon.com', 'target.com', 'apple.com', 'bestbuy.com', 'walmart.com', 'ebay.com',
+  'stockx.com', 'swappa.com', 'motorola.com'];
+export function shoppingSellerEvidence(offer: ShoppingOffer) {
+  let url: URL;
+  try { url = new URL(offer.url); }
+  catch { return { level: 'unassessed', label: 'Unassessed seller' }; }
+  if (['google.com', 'www.google.com'].includes(url.hostname) && ['/url', '/aclk'].includes(url.pathname)) {
+    const destination = url.pathname === '/url' ? url.searchParams.get('url') || url.searchParams.get('q') : url.searchParams.get('adurl');
+    if (destination) {
+      try { url = new URL(destination); }
+      catch { return { level: 'unassessed', label: 'Unassessed seller' }; }
+    }
+  }
+  const host = url.hostname.replace(/^www\./, '');
+  if (url.protocol !== 'https:' || url.username || url.password || url.port) {
+    return { level: 'unassessed', label: 'Unassessed seller' };
+  }
+  if (retailerDomains.includes(host)) {
+    return offer.verification?.status === 'verified'
+      ? { level: 'verified', label: 'Verified retailer page' }
+      : { level: 'recognized', label: 'Recognized retailer domain' };
+  }
+  if (['google.com', 'www.google.com'].includes(url.hostname)
+    && /^(?:amazon(?:\.com)?|target|apple(?: education store)?|best buy|walmart|ebay|stockx|swappa|motorola(?: - united states)?)$/i.test(offer.seller.trim())) {
+    return { level: 'recognized', label: 'Recognized seller name only' };
+  }
+  return { level: 'unassessed', label: 'Unassessed seller' };
+}
+
+function shoppingListedPrice(offer: ShoppingOffer) {
+  if (!/^\$\d[\d,]*(?:\.\d{2})?$/.test(offer.price)) return null;
+  const price = Number(offer.price.replace(/[$,]/g, ''));
+  return Number.isFinite(price) && price >= 0 ? price : null;
+}
+export function visibleShoppingOffers(offers: ShoppingOffer[], view: OfferView) {
+  const filtered = offers.filter(offer => {
+    const evidence = shoppingSellerEvidence(offer);
+    return view.seller === 'all' || (view.seller === 'recognized' ? evidence.level !== 'unassessed' : evidence.level === view.seller);
+  });
+  if (view.sort === 'source') return filtered;
+  return filtered.sort((a, b) => {
+    const first = shoppingListedPrice(a), second = shoppingListedPrice(b);
+    if (first == null) return second == null ? 0 : 1;
+    if (second == null) return -1;
+    return view.sort === 'price-asc' ? first - second : second - first;
+  });
+}
+
+export function groupShoppingOffers(offers: ShoppingOffer[]) {
+  const groups = new Map<string, { vendor: string; offers: ShoppingOffer[] }>();
+  for (const offer of offers) {
+    const name = offer.seller.trim().replace(/\s+/g, ' ') || 'Seller not identified';
+    const normalized = name.toLowerCase();
+    const vendor = /^apple(?: education store)?$/.test(normalized) ? 'Apple'
+      : /^amazon(?:\.com)?$/.test(normalized) ? 'Amazon'
+        : /^best\s*buy$/.test(normalized) ? 'Best Buy' : name;
+    const key = vendor.toLowerCase();
+    const group = groups.get(key);
+    if (group) group.offers.push(offer);
+    else groups.set(key, { vendor, offers: [offer] });
+  }
+  return Array.from(groups.values());
+}
+
+export function shoppingProductStatus(result: ShoppingSearch | null) {
+  const offers = result?.offers.filter(offer => offer.match === 'text-match') ?? [];
+  const stock = offers.map(offer => offer.verification?.status === 'verified'
+    && typeof offer.verification.in_stock === 'boolean'
+    ? offer.verification.in_stock ? 'in-stock' : 'out-of-stock'
+    : offer.availability === 'reported-in-stock' ? 'in-stock'
+      : offer.availability === 'reported-out-of-stock' ? 'out-of-stock' : 'unknown');
+  const prices = offers.map(shoppingListedPrice).filter((price): price is number => price != null);
+  return {
+    stock: stock.includes('in-stock') ? 'in-stock'
+      : stock.length && stock.every(value => value === 'out-of-stock') ? 'out-of-stock' : 'unknown',
+    sale: offers.some(offer => Boolean(offer.sale_text)),
+    lowestPrice: prices.length ? Math.min(...prices) : null,
+  };
 }
 export const shoppingCardSchema = z.object({
   title: z.string().max(500), text: z.string().max(1600), url: z.string().max(10000),
@@ -78,6 +175,8 @@ export function matchShoppingCards(cards: ShoppingCard[], input: ShoppingInput):
       /^(?:in stock(?: online)?|(?:pick\s*up|pickup)(?: today| tomorrow| available)|available for (?:pickup|pick up)|only \d+ left in stock)[.!]?$/i.test(line));
     const negative = card.text.split('\n').map(line => line.trim()).find(line =>
       /^(?:out of stock|not in stock|sold out|currently unavailable)[.!]?$/i.test(line));
+    const sale = card.text.split('\n').map(line => line.trim()).find(line =>
+      /^(?:on sale|sale|sale price(?:\s*[:·-]?\s*\$\d[\d,]*(?:\.\d{2})?)?|\d{1,2}% off|save (?:\d{1,2}%|\$\d[\d,]*(?:\.\d{2})?))[.!]?$/i.test(line));
     const key = `${url.href}|${card.title}|${card.price}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -86,6 +185,7 @@ export function matchShoppingCards(cards: ShoppingCard[], input: ShoppingInput):
       availability: positive && !negative ? 'reported-in-stock' : negative && !positive ? 'reported-out-of-stock' : 'unknown',
       availability_text: positive && !negative ? positive : negative && !positive ? negative : 'No unambiguous stock label',
       match: missing.length ? 'uncertain' : 'text-match', missing,
+      ...(sale ? { sale_text: sale } : {}),
       details: card.text.split('\n').map(line => line.trim()).filter(line =>
         /delivery|shipping|returns?|pick\s*up|pickup|in store|refurbished|renewed|pre[- ]owned|open[- ]box|sold by/i.test(line)
         && line !== card.title).slice(0, 8),

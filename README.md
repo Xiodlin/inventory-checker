@@ -197,7 +197,7 @@ unreadable pages produce explicit errors—not successful empty-stock results.
 
 | Retailer | Input and requirements |
 |---|---|
-| Best Buy | Numeric SKU or Best Buy product URL. Enter a Best Buy developer API key in the app's Settings. Uses the official product API. |
+| Best Buy (legacy entries) | Uses the official product API with a previously configured key. Settings no longer provides key controls; entries without a key report an explicit configuration error. New generalized searches need no key. |
 | Amazon | ASIN, HTTPS `amazon.com` URL containing `/dp/ASIN` or `/gp/product/ASIN`, or `https://a.co/d/...` share link. Reads public Schema.org data or exact-ASIN product-page stock/price fields; verification pages fail explicitly. |
 | Target | TCIN or HTTPS `target.com/p/.../-/A-TCIN` URL. A `preselect=TCIN` query selects that exact variant instead of the parent TCIN. Requires public stock/offer metadata; dynamic-only pages are unsupported and show an explicit error. |
 | Apple shipping | Specific HTTPS `apple.com/shop/product/...` URL publishing usable stock metadata. |
@@ -207,28 +207,53 @@ Best Buy keys are encrypted with Electron OS credential protection on desktop an
 SecureStore on mobile, not written into SQLite or backups. No plaintext fallback is
 used if desktop credential encryption is unavailable.
 
-### Getting a Best Buy API key
+### Compact settings
 
-Best Buy is currently the only retailer requiring a user-supplied API key.
-In either app's Settings, select **How to get a key** beside the key field to open
-these instructions in a pop-up. Select **Close** to return to Settings (desktop
-also supports Escape; Android supports Back):
+Notifications and check interval remain immediately accessible. Expand
+**Notifications & check timing help** for permission and scheduling guidance, or
+**Backups & local data** for export/import actions. Both sections start collapsed
+on desktop and mobile. Best Buy key fields and setup dialogs have been removed;
+previously stored keys are retained for existing legacy retailer entries.
 
-1. Open the official [Best Buy developer portal](https://developer.bestbuy.com/)
-   in your browser and select **Get API Key**.
-2. Sign in to or create a Best Buy account. Follow the developer registration
-   prompts and review the API terms.
-3. Copy the API key issued by the developer portal into **Settings → Best Buy API
-   key**, then choose **Save preferences** on desktop or **Save settings and enable
-   notifications** on mobile.
+Tracked product cards show **In Stock**, **Out of Stock**, or **Stock unknown**
+from the latest successful observation. Search tags use only required-text
+matches: any explicitly available match gives In Stock; all matches must be
+explicitly unavailable for Out of Stock. Missing offers do not prove stock absence.
+Retailer verification takes precedence over Google stock labels for that offer.
+Failed checks mark retained tags **Last known**.
 
-Use the API key, **not your account password**. Do not share it in screenshots,
-logs, or support messages. Keys are not transferred by backups; configure each
-device separately. If the portal does not issue a key, contact Best Buy developer
-support rather than entering another credential. Access is subject to Best Buy's
-registration requirements and API limits; see their
-[official API documentation](https://bestbuyapis.github.io/api-documentation/#user-guide).
-Amazon, Target, and Apple checks do not currently need API keys.
+**On Sale** appears only for an explicit sale/discount label on a required-text
+matching Google offer; a lower price, target price, or shipping promotion does not
+qualify. Expand offers to see the source label. Legacy direct-retailer checks
+do not currently collect sale labels, so they show stock tags but no sale tag.
+Tags are observational summaries, not guaranteed live inventory or new alert rules.
+
+**Lowest found: $…** shows the lowest Google-listed price among required-text
+matches in the latest successful search. It includes unknown/out-of-stock offers,
+excludes tax and shipping, and does not imply an all-time low or purchasability.
+No price tag appears without a matching listed price; failed checks retain the
+last successful price with the **Last known** marker.
+
+Within each product's latest offers, sort Google-listed prices low-to-high or
+high-to-low, or retain the original order. Seller-confidence filters offer all
+sellers, verified retailer pages, recognized domains/names, or unassessed sellers.
+Controls are independent per product and reset when the view unmounts; they do
+not alter monitoring, alerts, or summary tags. Invalid/missing prices sort last.
+
+Offers appear under collapsible vendor headings with listing counts. Repeated
+seller names (ignoring case/extra spaces) share a group; Apple Education Store
+and Apple share **Apple** while each listing keeps its original seller label.
+Grouping uses displayed seller names, not proof of site identity. Filters apply
+before grouping; the selected price order controls listings within a vendor and
+vendor order by the first listing in that order. Desktop keeps uncertain matches
+in their separate section. All listings remain accessible; none are deduplicated.
+
+Evidence labels are not legitimacy ratings or safety guarantees. A verified
+retailer page means the existing product-page verification succeeded. Recognized
+domains use an exact list of known retailer/marketplace hosts; a recognized name
+on an opaque Google link does not verify its destination. Marketplace recognition
+does not establish an individual seller's reliability. Other sellers are
+unassessed, not presumed fraudulent. No independent reputation lookup is performed.
 
 Apple pickup resolves the exact offer SKU from the product page, including carrier,
 then uses Apple's public-facing fulfillment endpoint. Returned stores are validated,

@@ -1,11 +1,17 @@
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Item } from '../services/apiService';
+import { ui } from '../ui';
 
 export default function ItemCard({ item, onPress }: { item: Item; onPress: () => void }) {
   return <Pressable accessibilityRole="button" onPress={onPress} style={styles.card}>
     <Text style={styles.title}>{[item.brand, item.model].filter(Boolean).join(' ') || item.sku || 'Tracked item'}</Text>
     <Text>{item.retailer.toUpperCase()} · {item.current_price == null ? 'Price pending' : `$${Number(item.current_price).toFixed(2)}`}</Text>
-    <Text>{item.in_stock == null ? item.last_check_error ? 'Availability unknown' : 'Stock pending' : item.fulfillment === 'pickup' ? item.in_stock ? 'Pickup available' : 'No pickup availability' : item.in_stock ? 'In stock' : 'Out of stock'}</Text>
+    <View style={ui.tags}>
+      <Text style={[ui.tag, item.in_stock === true ? ui.tagStock : item.in_stock === false ? ui.tagUnavailable : undefined]}>
+        {item.in_stock == null ? 'Stock unknown' : item.in_stock ? 'In Stock' : 'Out of Stock'}
+      </Text>
+      {!!item.last_check_error && item.in_stock != null && <Text style={ui.tag}>Last known</Text>}
+    </View>
     <Text>{item.fulfillment === 'pickup' ? `Pickup near ${item.pickup_zip} · ${item.pickup_radius_miles} mi` : 'Online / shipping'}</Text>
     {item.fulfillment === 'pickup' && item.pickup_stores.map(store => <Text key={store.id}>
       {store.name} · {store.distance_miles.toFixed(1)} mi · {store.available ? 'Pickup available' : 'Unavailable for pickup'}

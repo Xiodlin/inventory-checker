@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Notification, safeStorage } from 'electron';
-import { LocalMonitor, LocalStore, ShoppingMonitor } from '@inventory-checker/core';
+import { LocalMonitor, LocalStore, ShoppingMonitor, verifyShoppingOffers } from '@inventory-checker/core';
 import { DesktopDatabase } from './database';
 import { ShoppingService } from './shoppingService';
 
@@ -20,7 +20,10 @@ export class DesktopService {
     this.database = new DesktopDatabase(join(directory, 'inventory.sqlite'));
     this.store = new LocalStore(this.database, randomUUID);
     this.shopping = new ShoppingService(this.database);
-    this.shoppingMonitor = new ShoppingMonitor(this.store, randomUUID, input => this.shopping.search(input), changed);
+    this.shoppingMonitor = new ShoppingMonitor(this.store, randomUUID, async input => {
+      const generation = this.checkGeneration;
+      return verifyShoppingOffers(await this.shopping.search(input), input, fetch, () => generation !== this.checkGeneration);
+    }, changed);
     this.keyPath = join(directory, 'bestbuy-key.bin');
     this.monitor = new LocalMonitor(this.store, randomUUID(), () => this.getKey(),
       alert => this.showNotification(alert.title, alert.body, alert.id, openWindow), changed);
@@ -60,6 +63,15 @@ export class DesktopService {
       return { checked: 0, succeeded: 0, failed: 0, remaining: 0, reason: 'interrupted' as const };
     }
     return this.monitor.tick();
+  }
+  async checkNow() {
+    const generation = this.checkGeneration;
+    if (this.shopping.busy) throw new Error('Wait for the active Google search before checking the watchlist.');
+    await this.shoppingMonitor.checkNow();
+    if (generation !== this.checkGeneration) {
+      return { checked: 0, succeeded: 0, failed: 0, remaining: 0, reason: 'interrupted' as const };
+    }
+    return this.monitor.checkNow();
   }
   cancelChecks() { this.checkGeneration++; this.monitor.cancelRun(); this.shoppingMonitor.cancel(); this.shopping.cancel(); }
   async getKey(): Promise<string | undefined> {

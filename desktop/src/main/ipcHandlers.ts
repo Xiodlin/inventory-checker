@@ -18,7 +18,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null, rende
       case 'settings': return service.store.settings();
       case 'save-settings': return service.store.saveSettings(payload);
       case 'status': return service.store.status();
-      case 'check': return service.monitor.checkNow();
+      case 'check': return service.checkNow();
       case 'check-due': return service.checkDue();
       case 'save-key': return service.saveKey(payload);
       case 'has-key': return Boolean(await service.getKey());

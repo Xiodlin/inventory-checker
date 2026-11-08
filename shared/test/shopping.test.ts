@@ -26,7 +26,11 @@ test('saved searches use retailer settings, retry empty matches and notify only 
     await shopping.tick();
     assert.equal(calls, 1);
     assert.equal((await store.notifications()).length, 0);
-    await shopping.tick(); assert.equal(calls, 1);
+    time += 5 * 60000;
+    result = outcome([{ ...offer, verification: { status: 'verified', in_stock: false, message: 'Retailer out of stock' } }]);
+    await shopping.tick();
+    assert.equal((await store.notifications()).length, 0, 'conflicting verified out-of-stock must suppress a Google stock alert');
+    await shopping.tick(); assert.equal(calls, 2);
     time += 5 * 60000;
     result = outcome([{ ...offer, availability: 'unknown' }]);
     await shopping.tick(); assert.equal((await store.notifications()).length, 0);
@@ -103,5 +107,51 @@ test('saved searches persist independently of recent history and report thrown c
     assert.equal((await store.notifications()).length, 0);
     assert.doesNotMatch(await store.exportBackup(), /shopping_watches/);
     await assert.rejects(shopping.save({ ...input, variants: [] }));
+  } finally { await db.close(); }
+});
+
+test('Check now retries every saved product even when automatic searches are paused', async () => {
+  const db = new DesktopDatabase(':memory:');
+  try {
+    const store = new LocalStore(db, randomUUID); await store.initialize();
+    await store.saveSettings({ notifications_enabled: false, check_interval_minutes: 15, background_enabled: false });
+    const checked: string[] = [];
+    const shopping = new ShoppingMonitor(store, randomUUID, async input => {
+      checked.push(input.product); return outcome([]);
+    }, () => {});
+    await shopping.save(input);
+    await shopping.save({ product: 'iPhone Duo', variants: ['256GB'] });
+    await shopping.tick(); assert.equal(checked.length, 0);
+    const manual = shopping.checkNow();
+    assert.equal(manual, shopping.checkNow(), 'manual requests must coalesce');
+    await manual;
+    assert.deepEqual(checked.sort(), ['MacBook Neo', 'iPhone Duo'].sort());
+    await shopping.checkNow();
+    assert.equal(checked.length, 4, 'manual checks must retry recently checked products');
+  } finally { await db.close(); }
+});
+
+test('manual search checks wait for scheduled work and cancel queued work on suspension', async () => {
+  const db = new DesktopDatabase(':memory:');
+  try {
+    const store = new LocalStore(db, randomUUID); await store.initialize();
+    let calls = 0;
+    let resolve!: (value: ShoppingSearch) => void;
+    let started!: () => void;
+    const ready = new Promise<void>(done => { started = done; });
+    const shopping = new ShoppingMonitor(store, randomUUID, async () => {
+      calls++;
+      if (calls === 1) { started(); return new Promise(done => { resolve = done; }); }
+      return outcome([]);
+    }, () => {});
+    await shopping.save(input);
+    const scheduled = shopping.tick(); await ready;
+    const manual = shopping.checkNow(); assert.equal(manual, shopping.checkNow());
+    assert.equal(calls, 1);
+    shopping.cancel(); resolve(outcome([]));
+    await scheduled; await manual;
+    assert.equal(calls, 1, 'suspension must not launch the queued manual search');
+    await shopping.checkNow();
+    assert.equal(calls, 2);
   } finally { await db.close(); }
 });

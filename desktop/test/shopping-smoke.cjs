@@ -97,6 +97,8 @@ app.whenReady().then(async () => {
     assert.equal(result.offers.length, 4);
     assert.equal(result.offers.filter(offer => offer.match === 'text-match').length, 2);
     assert.equal(result.offers[0].availability, 'reported-in-stock');
+    assert.equal(result.offers[0].seller, 'Target');
+    assert.ok(result.offers[0].details.includes('Free returns'));
     assert.equal(result.offers.find(offer => offer.seller === 'Walmart').availability, 'unknown');
     assert.equal((await shopping.history()).length, 1);
     const reopened = new ShoppingService(db);

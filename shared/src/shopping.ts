@@ -20,6 +20,9 @@ export interface ShoppingOffer {
   availability: 'reported-in-stock' | 'reported-out-of-stock' | 'unknown';
   availability_text: string;
   match: 'text-match' | 'uncertain'; missing: string[];
+  details?: string[];
+  verification?: { status: 'verified' | 'failed' | 'unsupported' | 'skipped'; message: string;
+    url?: string; in_stock?: boolean; price?: number | null };
 }
 export interface ShoppingSearch {
   id: string; input: ShoppingInput; checked_at: string;
@@ -72,7 +75,7 @@ export function matchShoppingCards(cards: ShoppingCard[], input: ShoppingInput):
     if (accessory) missing.push('Product, not an accessory');
     if (condition) missing.push('New condition not established');
     const positive = card.text.split('\n').map(line => line.trim()).find(line =>
-      /^(?:in stock online|in stock|pick\s*up today|pickup today)[.!]?$/i.test(line));
+      /^(?:in stock(?: online)?|(?:pick\s*up|pickup)(?: today| tomorrow| available)|available for (?:pickup|pick up)|only \d+ left in stock)[.!]?$/i.test(line));
     const negative = card.text.split('\n').map(line => line.trim()).find(line =>
       /^(?:out of stock|not in stock|sold out|currently unavailable)[.!]?$/i.test(line));
     const key = `${url.href}|${card.title}|${card.price}`;
@@ -83,6 +86,9 @@ export function matchShoppingCards(cards: ShoppingCard[], input: ShoppingInput):
       availability: positive && !negative ? 'reported-in-stock' : negative && !positive ? 'reported-out-of-stock' : 'unknown',
       availability_text: positive && !negative ? positive : negative && !positive ? negative : 'No unambiguous stock label',
       match: missing.length ? 'uncertain' : 'text-match', missing,
+      details: card.text.split('\n').map(line => line.trim()).filter(line =>
+        /delivery|shipping|returns?|pick\s*up|pickup|in store|refurbished|renewed|pre[- ]owned|open[- ]box|sold by/i.test(line)
+        && line !== card.title).slice(0, 8),
     });
   }
   return offers;
@@ -118,6 +124,10 @@ export function extractShoppingCards(): ShoppingCard[] {
   const groups = Array.from(cards);
   for (let index = 0; index < groups.length; index++) {
     const card = groups[index];
+    if (groups.some(parent => parent !== card && parent.contains(card)
+      && ((parent as HTMLElement).innerText || '').length <= 1600
+      && Array.from(parent.querySelectorAll('h3, h4, [role="heading"]')).filter(visible).length === 1
+      && new Set(((parent as HTMLElement).innerText || '').match(/\$\d[\d,]*(?:\.\d{2})?/g) || []).size === 1)) continue;
     const text = ((card as HTMLElement).innerText || '').trim();
     if (!text || text.length > 1600) continue;
     const prices = text.match(/\$\d[\d,]*(?:\.\d{2})?/g) || [];
@@ -134,9 +144,11 @@ export function extractShoppingCards(): ShoppingCard[] {
       if (!destination) continue;
       try { url.href = new URL(destination).href; } catch { continue; }
     }
-    const seller = text.split('\n').map(line => line.trim()).find(line =>
+    const sellerLabels = Array.from(card.querySelectorAll('[aria-label^="From "]')).filter(visible)
+      .map(element => (element.getAttribute('aria-label') || '').slice(5).trim());
+    const seller = new Set(sellerLabels).size === 1 ? sellerLabels[0] : text.split('\n').map(line => line.trim()).find(line =>
       /^(?:Target|Best Buy|Walmart|Apple|Amazon(?:\.com)?|Costco|B&H|Newegg|Micro Center|Adorama|GameStop|DoorDash)$/i.test(line)) || '';
-    result.push({ title, text: text.slice(0, 1600), url: url.href, seller, price });
+    result.push({ title, text: text.slice(0, 1600), url: url.href, seller: seller || '', price });
     if (result.length >= 100) break;
   }
   return result;

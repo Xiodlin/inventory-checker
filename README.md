@@ -66,8 +66,8 @@ delivery failures are shown explicitly.
 ## Checks, sleep, and notifications
 
 - Default product interval: **15 minutes**, configurable from 5 to 10,080 minutes.
-- Desktop and foreground mobile look for due products every minute. New products
-  also request a local check immediately; overlapping runs are coalesced.
+- Desktop and foreground mobile look for due products every minute. New general
+  searches start on the next available tick; overlapping runs are coalesced.
 - **Check now** retries every tracked product immediately, including recent failed
   checks, and reports successes/failures. Automatic checks still respect your interval.
   Manual requests wait for an active run and coalesce repeated clicks; suspension
@@ -97,12 +97,13 @@ while enabled; OS delivery and crash recovery are not exactly-once guarantees.
 
 ## Retailers and Apple pickup
 
-Choose stock alerts, target-price alerts, or both for each product.
+New products use generalized Google Shopping monitoring. Existing direct retailer
+products retain their stock/price/pickup rules and continue checking unchanged.
 
 ### Experimental shopping discovery and search alerts
 
-**Find this product** in the desktop sidebar or mobile dashboard performs a Google Shopping
-search without an API key. Enter a product/model and required variant phrases
+**Add product** on the desktop and mobile Dashboard saves a Google Shopping search
+without an API key. Enter a product/model and required variant phrases
 (for example `MacBook Neo` and `256GB, Indigo`). An optional example URL is a saved
 reference only: this prototype does not fetch it or infer specifications from it.
 
@@ -112,8 +113,9 @@ preload, Node access, sign-in session, download permission, or access to the loc
 app's IPC bridge. It does not click purchase controls or automate CAPTCHA/consent.
 Navigation stays on Google's search/product pages. Cookies/cache are cleared after
 each desktop search; the mobile private WebView is removed after each search.
-The latest **20** desktop search outcomes are retained in local SQLite.
-Use **Clear shopping search history** to remove them. This history is not included
+The latest **20** desktop search outcomes are retained internally in local SQLite,
+separately from each product's last successful result. There is no separate
+one-time search or recent-history page. Search data is not included
 in watchlist backups. Google receives the search, network address, and browser
 requests; on-device storage does not mean offline or third-party-free processing.
 No ZIP/GPS is sent by this prototype; location-dependent results may use Google's
@@ -123,17 +125,27 @@ Required text matches contain all requested phrases in the offer title. This is
 not proof of an exact SKU: uncertain variants, accessories, and used/refurbished
 listings are separated. Stock requires an explicit visible stock/pickup label;
 a price, delivery estimate, or ordinary listing alone leaves availability unknown.
-All availability is **Google-reported**, never retailer-verified. Offers are not
-automatically added to the retailer watchlist.
-Results, saved alerts, and recent history have separate panels. Expand an offer's
+All availability is **Google-reported**, never retailer-verified. Google coverage
+does not include every retailer or product; generalized searches do not replace
+an official retailer API's guarantees.
+
+There is one add flow and one **Tracked products** watchlist for general searches
+and existing direct retailer products. Expand a product's **Details and latest
+offers** to see the latest successful observation; there is no separate results
+panel. Expand an offer's
 **Offer link**, then click its URL field to select the complete link for copying.
 Alert behavior and retention details are available in expandable help sections.
+The add form and product/offer details start collapsed. Collapsing a section does not
+stop monitoring or discard its form values. Mobile notifications are also collapsible.
 
-Use **Save search for stock alerts** even before a successful search or when no
-required-text match was found. Saved searches recheck using the **same interval in
+Use **Add product** even before a successful search or when no
+required-text match was found. Saved products recheck using the **same interval in
 Settings as retailer checks** (15 minutes by default). Automatic search checks
 respect the background-checks toggle. One oldest due search runs per minute tick,
 so large lists may check later than the configured interval.
+**Check now** retries saved searches as well as existing retailer products, even
+when automatic searches are paused. It checks sequentially, so many products may
+take time; Google failures appear on the affected product.
 
 - **Desktop:** runs while the app is open or in the tray and the computer is awake.
 - **Mobile:** Google checks run **only while the app is open and active**. They are
@@ -150,9 +162,27 @@ so large lists may check later than the configured interval.
 - Failed/blocked searches retain the last successful result and alert baseline,
   show their error/attempt time, and retry when next due. They do not mean no stock.
 - Saved searches and their last successful results remain on-device until
-  **Delete saved search**. Clearing recent history does not stop them. Alerts remain
+  **Remove product**. Alerts remain
   even after deleting a search. Searches are excluded from watchlist backups; alerts
   use the existing backup policy. Devices do not synchronize.
+
+Google offer details now retain visible delivery, pickup, return, and condition
+text, plus labeled seller names. Delivery estimates and store opening hours are
+not treated as proof of stock. The inspected live layout did not expose reliable
+expanded product/seller URLs; the app does not invent or navigate to hidden ones.
+
+After a successful search, automatic retailer verification considers at most
+two required-text offers. Supported direct Amazon, Target, and specific Apple
+product URLs are fetched through existing bounded public-page readers (15-second
+request timeouts; no automatic redirects). This may add up to 30 seconds to a check.
+An exposed Google `/url` or `adurl` destination can be checked; opaque ad/goto
+tracking links are not clicked or decoded. Best Buy and other unsupported sellers
+show an explicit unsupported reason. Verification requires the retailer title to
+match every requested phrase and unambiguous product stock metadata. It is not
+exact-SKU or local-pickup verification. Google and retailer observations are shown
+separately; verification failures do not erase Google observations. A verified
+out-of-stock result suppresses a conflicting Google stock alert. The existing
+Google-reported-only alert rule remains unchanged for other offers.
 
 Each search has a 30-second timeout. Existing automatic
 retailer checks are unchanged. Live Google offer extraction has been verified

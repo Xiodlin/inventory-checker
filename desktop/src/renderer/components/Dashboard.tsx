@@ -5,8 +5,8 @@ import type { Item, PricePoint } from '../types';
 const money = (value?: number | null) =>
   value == null ? 'Not checked' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
-export default function Dashboard({ items, onDelete }: {
-  items: Item[]; onDelete(id: Item['id']): Promise<void>;
+export default function Dashboard({ items, onDelete, embedded = false }: {
+  items: Item[]; onDelete(id: Item['id']): Promise<void>; embedded?: boolean;
 }) {
   const [selected, setSelected] = useState<Item | null>(null);
   const [prices, setPrices] = useState<PricePoint[]>([]);
@@ -30,8 +30,8 @@ export default function Dashboard({ items, onDelete }: {
     catch (failure) { setError(errorMessage(failure)); }
     finally { setDeleting(null); }
   }
-  return <section className="panel">
-    <div className="section-heading"><div><span className="eyebrow">YOUR INVENTORY</span><h2>Tracked products <span className="count">{items.length}</span></h2></div></div>
+  return <section className={embedded ? 'existing-products' : 'panel'}>
+    {!embedded && <div className="section-heading"><div><span className="eyebrow">YOUR INVENTORY</span><h2>Tracked products <span className="count">{items.length}</span></h2></div></div>}
     {items.length === 0 ? <div className="empty"><span className="empty-icon">◇</span><h3>Your watchlist is ready</h3><p>Add your first product above to monitor inventory and prices.</p></div> :
       <div className="table-wrap"><table><thead><tr><th>Product</th><th>Retailer</th><th>Availability</th><th>Price / target</th><th>Actions</th></tr></thead>
         <tbody>{items.map(item => <tr key={item.id}>

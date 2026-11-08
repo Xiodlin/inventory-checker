@@ -13,6 +13,7 @@ const offerKey = (offer: ShoppingSearch['offers'][number]) =>
 
 export class ShoppingMonitor {
   private running?: Promise<void>;
+  private manual?: Promise<void>;
   private generation = 0;
   constructor(private readonly store: LocalStore, private readonly uuid: () => string,
     private readonly search: (input: ShoppingInput) => Promise<ShoppingSearch>,
@@ -46,16 +47,33 @@ export class ShoppingMonitor {
     this.changed();
   }
   tick() {
+    if (this.manual) return this.manual;
     if (this.running) return this.running;
     const generation = this.generation;
     this.running = this.run(generation).finally(() => { this.running = undefined; });
     return this.running;
   }
-  private async run(generation: number) {
+  checkNow() {
+    if (this.manual) return this.manual;
+    const generation = this.generation;
+    this.manual = (async () => {
+      if (this.running) await this.running;
+      if (generation !== this.generation) return;
+      this.running = (async () => {
+        for (const watch of await this.watches()) {
+          if (generation !== this.generation) break;
+          if (watch.enabled) await this.run(generation, watch.id);
+        }
+      })().finally(() => { this.running = undefined; });
+      await this.running;
+    })().finally(() => { this.manual = undefined; });
+    return this.manual;
+  }
+  private async run(generation: number, forceId?: string) {
     const settings = await this.store.settings();
-    if (!settings.background_enabled) return;
-    const watch = (await this.watches()).filter(value => value.enabled && (!value.last_checked_at
-      || Date.parse(value.last_checked_at) <= this.now() - settings.check_interval_minutes * 60000))
+    if (!forceId && !settings.background_enabled) return;
+    const watch = (await this.watches()).filter(value => value.enabled && (forceId ? value.id === forceId : (!value.last_checked_at
+      || Date.parse(value.last_checked_at) <= this.now() - settings.check_interval_minutes * 60000)))
       .sort((a, b) => (a.last_checked_at ?? '').localeCompare(b.last_checked_at ?? ''))[0];
     if (!watch || generation !== this.generation) return;
     let result: ShoppingSearch | undefined;
@@ -76,7 +94,8 @@ export class ShoppingMonitor {
         return;
       }
       const previous = z.array(z.string()).parse(JSON.parse(row.stock));
-      const available = result.offers.filter(offer => offer.match === 'text-match' && offer.availability === 'reported-in-stock');
+      const available = result.offers.filter(offer => offer.match === 'text-match' && offer.availability === 'reported-in-stock'
+        && !(offer.verification?.status === 'verified' && offer.verification.in_stock === false));
       const unknown = result.offers.filter(offer => offer.match === 'text-match' && offer.availability === 'unknown').map(offerKey);
       const stock = [...new Set([...available.map(offerKey), ...previous.filter(key => unknown.includes(key))])];
       const fresh = available.filter((offer, index) => !previous.includes(offerKey(offer))
@@ -85,7 +104,7 @@ export class ShoppingMonitor {
         await tx.run('INSERT INTO notifications(id,title,body,created_at) VALUES(?,?,?,?)',
           [this.uuid(), `Google reports stock: ${watch.input.product}`,
             fresh.slice(0, 5).map(offer => `${offer.title} — ${offer.seller} · ${offer.price} · ${offer.availability_text}`).join('\n')
-              + '\nGoogle-reported, not retailer-verified. Open Find this product to review.', time]);
+              + '\nGoogle-reported, not retailer-verified. Open watchlist details to review.', time]);
       }
       await tx.run('UPDATE shopping_watches SET last_checked_at=?,error=NULL,result=?,stock=? WHERE id=?',
         [time, JSON.stringify(result), JSON.stringify(stock), watch.id]);
@@ -93,5 +112,5 @@ export class ShoppingMonitor {
     this.changed();
   }
   cancel() { this.generation++; }
-  async stop() { this.cancel(); await this.running; }
+  async stop() { this.cancel(); await this.running; await this.manual; }
 }

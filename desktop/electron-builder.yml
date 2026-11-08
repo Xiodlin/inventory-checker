@@ -6,6 +6,10 @@ files:
   - dist/**/*
   - package.json
 asar: true
+icon: ../assets/icon.png
+extraResources:
+  - from: ../assets/icon.png
+    to: icon.png
 linux:
   target: AppImage
 win:

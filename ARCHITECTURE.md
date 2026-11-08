@@ -102,7 +102,21 @@ restricted navigation, and no automatic interaction with consent/CAPTCHA control
 Only visible offer cards with titles and unambiguous prices are extracted. Required
 title phrases, accessory/condition checks, and explicit availability labels produce
 reported or uncertain matches, not verified retailer stock. The latest 20 outcomes
-are stored in a desktop-only SQLite table and can be cleared from the UI.
+are retained internally in a desktop-only SQLite table.
+Both Dashboards have one general-search add flow and a unified watchlist: saved
+searches show latest offers in expandable product details, with no standalone
+results/history UI. Existing direct retailer entries remain in that same list,
+preserving stock/price/pickup monitoring and backups. General search coverage is
+not assumed to be equivalent to every retailer API. Check now retries both kinds.
+Visible seller labels and delivery/pickup/return text are retained separately from
+stock. Nested card fragments are excluded when a larger unambiguous card contains
+the same heading/price, avoiding loss of its seller and fulfillment lines.
+After rendering, a shared verifier considers at most two required-text offers on
+direct supported product URLs. Existing public-page readers enforce fixed retailer
+hosts, timeouts, body limits, and matching product identity; retailer titles must
+also establish the requested phrases. Opaque Google advertising links are not
+clicked. Verification is saved separately, never relabeled as exact-SKU/pickup
+proof. Verified out-of-stock contradicting Google suppresses a stock alert.
 Both clients persist saved inputs, latest successful outcomes, errors/attempt times,
 and stock-alert deduplication in `shopping_watches`. Due searches use retailer
 Settings and the automatic-check toggle; at most one oldest due search runs per

@@ -4,7 +4,8 @@ import { randomUUID } from 'expo-crypto';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
-import { checkInventory, LocalMonitor, LocalStore, ShoppingMonitor, type SqlConnection, type SqlDatabase, type SqlValue } from '@inventory-checker/core';
+import { checkInventory, LocalMonitor, LocalStore, ShoppingMonitor, verifyShoppingOffers, type SqlConnection, type SqlDatabase, type SqlValue } from '@inventory-checker/core';
+import { AppState } from 'react-native';
 import { shoppingBrowser } from './shoppingBrowser';
 
 function connection(database: SQLiteDatabase): SqlConnection {
@@ -75,7 +76,8 @@ export function localRuntime() {
           trigger: Platform.OS === 'android' ? { channelId: 'inventory' } : null,
         });
       }, changed, (item, key) => checkInventory(item, key, fetch));
-      const shopping = new ShoppingMonitor(store, randomUUID, input => shoppingBrowser.search(input), changed);
+      const shopping = new ShoppingMonitor(store, randomUUID, async input =>
+        verifyShoppingOffers(await shoppingBrowser.search(input), input, fetch, () => AppState.currentState !== 'active'), changed);
       return { store, monitor, shopping };
     })().catch(error => { runtime = undefined; throw error; });
   }

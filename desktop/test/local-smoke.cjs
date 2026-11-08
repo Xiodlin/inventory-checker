@@ -118,8 +118,6 @@ app.whenReady().then(async () => {
     }
     const originalSearch = service.shopping.search.bind(service.shopping);
     let savedSearch;
-    const originalHistory = service.shopping.history.bind(service.shopping);
-    const originalClear = service.shopping.clearHistory.bind(service.shopping);
     try {
       service.shopping.search = async input => {
         savedSearch = { id: 'shopping-fixture', input, checked_at: new Date().toISOString(), error: null,
@@ -131,27 +129,52 @@ app.whenReady().then(async () => {
           ] };
         return savedSearch;
       };
-      service.shopping.history = async () => savedSearch ? [savedSearch] : [];
-      service.shopping.clearHistory = async () => { savedSearch = undefined; };
       const discovery = await window.webContents.executeJavaScript(`(async () => {
-        [...document.querySelectorAll('nav button')].find(button => button.textContent === 'Find this product').click();
+        [...document.querySelectorAll('nav button')].find(button => button.textContent.includes('Dashboard')).click();
         for (let attempt = 0; attempt < 50 && !document.querySelector('input[name="product"]'); attempt++) {
           await new Promise(resolve => setTimeout(resolve, 20));
         }
+        const collapsible = [...document.querySelectorAll('.discovery-collapse')];
+        if (collapsible.some(section => section.open)) throw new Error('Search sections should start collapsed');
+        if (collapsible.some(section => section.getBoundingClientRect().height > 90)) throw new Error('Collapsed search rows should stay compact');
+        if (document.querySelector('.dashboard-add')) throw new Error('Only one add-product form should exist');
+        document.querySelector('#discovery-title').closest('details').open = true;
         document.querySelector('input[name="product"]').value = 'MacBook Neo';
         document.querySelector('input[name="variants"]').value = '256GB, Indigo';
         document.querySelector('.discovery-form').requestSubmit();
         for (let attempt = 0; attempt < 50; attempt++) {
-          if (document.body.innerText.includes('Found 2 readable offers.')) {
-            return { text: document.body.innerText, uncertainClosed: !document.querySelector('.discovery-uncertain').open };
-          }
+          if (document.body.innerText.includes('Product saved.')) return document.body.innerText;
           await new Promise(resolve => setTimeout(resolve, 20));
         }
         throw new Error('Discovery search did not render');
       })()`);
-      assert.match(discovery.text, /Google-reported availability/);
-      assert.match(discovery.text, /not retailer-verified/);
-      assert.equal(discovery.uncertainClosed, true);
+      assert.equal(savedSearch, undefined, 'adding a product must save a watch, not perform a one-time search');
+      assert.match(discovery, /Product saved/);
+      assert.equal((await service.shoppingMonitor.watches()).length, 1);
+      const integrated = await window.webContents.executeJavaScript(`({
+        products: document.body.innerText.includes('Tracked products'),
+        shopping: !!document.querySelector('#discovery-title'),
+        separateNavigation: [...document.querySelectorAll('nav button')].some(button => button.textContent === 'Find this product')
+      })`);
+      assert.equal(integrated.products, true);
+      assert.equal(integrated.shopping, true);
+      assert.equal(integrated.separateNavigation, false);
+      const iconLoaded = await window.webContents.executeJavaScript(`(() => {
+        const icon = document.querySelector('.brand img');
+        return icon.complete && icon.naturalWidth > 0;
+      })()`);
+      assert.equal(iconLoaded, true, 'the stack-of-boxes icon must load in the packaged renderer');
+      assert.equal(await window.webContents.executeJavaScript(`document.querySelector('#discovery-results-title') === null && document.querySelector('#discovery-alerts-title') === null`), true);
+      await service.checkDue();
+      await window.webContents.executeJavaScript(`(async () => {
+        for (let attempt = 0; attempt < 50; attempt++) {
+          if (document.querySelector('.watch-details .discovery-link')) {
+            document.querySelector('.watch-details').open = true; return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        throw new Error('Watchlist offers did not render');
+      })()`);
       for (const width of [1180, 900]) {
         window.setSize(width, 900);
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -169,27 +192,26 @@ app.whenReady().then(async () => {
           const contained = input.getBoundingClientRect().right <= input.closest('.discovery-card').getBoundingClientRect().right;
           input.blur();
           link.open = false;
-          return { sections: sections.length, separated: rects.slice(1).every((rect, index) => rect.top - rects[index].bottom >= 20),
+          return { sections: sections.length, separated: rects.slice(1).every((rect, index) => rect.top - rects[index].bottom >= 12),
             overflow: document.documentElement.scrollWidth > window.innerWidth,
             hiddenLink, selectable, contained };
         })()`);
-        assert.equal(layout.sections, 4);
+        assert.equal(layout.sections, 2);
         assert.equal(layout.separated, true, 'results, alerts and history must have distinct panel spacing');
         assert.equal(layout.overflow, false, 'long offer URLs must not overflow the page');
         assert.equal(layout.hiddenLink, true, 'tracking links must be collapsed by default');
         assert.equal(layout.selectable, true, 'clicking an offer link must select the full URL for copying');
         assert.equal(layout.contained, true);
       }
-      assert.deepEqual(savedSearch.input.variants, ['256GB', 'Indigo']);
-      const savedWatch = await window.webContents.executeJavaScript(`(async () => {
-        [...document.querySelectorAll('button')].find(button => button.textContent === 'Save search for stock alerts').click();
-        for (let attempt = 0; attempt < 50; attempt++) {
-          if (document.body.innerText.includes('Pending check')) return true;
-          await new Promise(resolve => setTimeout(resolve, 20));
-        }
-        return false;
+      assert.deepEqual([...savedSearch.input.variants].sort(), ['256GB', 'Indigo'].sort());
+      const retainedForm = await window.webContents.executeJavaScript(`(() => {
+        const section = document.querySelector('#discovery-title').closest('details');
+        document.querySelector('input[name="product"]').value = 'MacBook Neo';
+        section.open = false;
+        section.open = true;
+        return document.querySelector('input[name="product"]').value;
       })()`);
-      assert.equal(savedWatch, true, 'saving from the form must persist a watch without needing a successful search');
+      assert.equal(retainedForm, 'MacBook Neo', 'collapsing a form must retain entered values');
       assert.equal((await service.shoppingMonitor.watches()).length, 1);
       const automaticShow = Notification.prototype.show;
       const automaticClose = Notification.prototype.close;
@@ -198,7 +220,7 @@ app.whenReady().then(async () => {
         Notification.prototype.show = function () { automaticAlerts++; setImmediate(() => this.emit('show')); };
         Notification.prototype.close = function () { this.emit('close'); };
         await service.store.saveSettings({ notifications_enabled: true, check_interval_minutes: 15, background_enabled: true });
-        await service.checkDue();
+        await service.checkNow();
         assert.equal(automaticAlerts, 1, 'scheduled saved-search checks must use native desktop notifications');
         assert.equal((await service.store.notifications()).length, 1);
         await service.checkDue();
@@ -213,33 +235,26 @@ app.whenReady().then(async () => {
           error: 'Google requires verification. Search stopped.' };
         return savedSearch;
       };
+      await service.checkNow();
       const blockedFeedback = await window.webContents.executeJavaScript(`(async () => {
-        document.querySelector('.discovery-form').requestSubmit();
         for (let attempt = 0; attempt < 50; attempt++) {
           if (document.body.innerText.includes('Google requires verification. Search stopped.')) {
-            return !document.body.innerText.includes('Found 2 readable offers.');
+            return !!document.querySelector('.watch-details .discovery-link');
           }
           await new Promise(resolve => setTimeout(resolve, 20));
         }
         return false;
       })()`);
-      assert.equal(blockedFeedback, true, 'blocked searches must replace old offers with an explicit error');
-      const cleared = await window.webContents.executeJavaScript(`(async () => {
-        [...document.querySelectorAll('button')].find(button => button.textContent === 'Clear shopping search history').click();
-        for (let attempt = 0; attempt < 50; attempt++) {
-          if (!document.body.innerText.includes('Google requires verification. Search stopped.')) return true;
+      assert.equal(blockedFeedback, true, 'blocked searches must show an error while retaining last successful offers in watchlist details');
+      await window.webContents.executeJavaScript(`(async () => {
+        [...document.querySelectorAll('button')].find(button => button.textContent === 'Remove product').click();
+        for (let attempt = 0; attempt < 50 && document.querySelector('.watch-details'); attempt++) {
           await new Promise(resolve => setTimeout(resolve, 20));
         }
-        return false;
       })()`);
-      assert.equal(cleared, true);
-      assert.equal((await service.shoppingMonitor.watches()).length, 1, 'clearing history must not remove saved alerts');
-      await window.webContents.executeJavaScript(`window.inventoryDesktop.removeShoppingWatch(${JSON.stringify((await service.shoppingMonitor.watches())[0].id)})`);
       assert.equal((await service.shoppingMonitor.watches()).length, 0);
     } finally {
       service.shopping.search = originalSearch;
-      service.shopping.history = originalHistory;
-      service.shopping.clearHistory = originalClear;
     }
     const foreign = new BrowserWindow({ show: false, webPreferences: { preload: resolve(__dirname, '../dist/main/preload.js'), sandbox: true } });
     await foreign.loadURL('data:text/html,<h1>Foreign page</h1>');

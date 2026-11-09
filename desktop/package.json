@@ -10,9 +10,13 @@
     "dev:prepare": "npm run build && node scripts/dev.cjs --prepare",
     "start": "electron .",
     "test": "electron test/local-smoke.cjs && electron test/shopping-smoke.cjs",
+    "prepackage": "node scripts/bump-version.cjs",
     "package": "npm run build && electron-builder",
+    "prepackage:mac": "node scripts/bump-version.cjs",
     "package:mac": "npm run build && electron-builder --mac --arm64 --x64 --publish never -c.mac.identity=-",
+    "prepackage:win": "node scripts/bump-version.cjs",
     "package:win": "npm run build && electron-builder --win --x64 --publish never",
+    "test:release": "node --test test/release-version.test.cjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test:storybook": "vitest run --project storybook"

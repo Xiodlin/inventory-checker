@@ -416,6 +416,20 @@ npm run package:mac --workspace desktop # macOS: separate Apple Silicon and Inte
 npm run package:win --workspace desktop # Windows: x64 NSIS setup wizard
 ```
 
+Each installer command (including `npm run package --workspace desktop`)
+automatically increments the desktop patch version **before** building, for example
+`1.0.0` → `1.0.1`. It updates `desktop/package.json` and the workspace entry in
+`package-lock.json`, without creating a Git commit or tag. No manual version edit is
+needed for a patch release. Run packaging commands sequentially, not concurrently.
+Separate Mac and Windows commands increment separately, so they produce consecutive
+release versions rather than sharing a version. If building fails, the increment
+remains; retrying increments again. Development builds do not change the version.
+Automatic increments require a stable `major.minor.patch` version and a matching
+lockfile entry; inconsistent metadata or prerelease versions stop the command
+before packaging.
+Run `npm run test:release --workspace desktop` to check this lifecycle in isolated
+temporary workspaces without building installers or changing the real version.
+
 Installers are written to `desktop/release/` with platform and architecture in
 their names. Open the appropriate Mac DMG and drag Inventory Checker to
 Applications. On Windows, run the setup executable; it installs for the current

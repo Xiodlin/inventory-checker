@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { Item, NewItem, LocalNotification, LocalSettings, PricePoint, MonitorStatus, CheckResult } from '@inventory-checker/core';
+import type { Item, NewItem, LocalNotification, LocalSettings, PricePoint, MonitorStatus, CheckResult, NotificationTarget } from '@inventory-checker/core';
 import type { ShoppingInput, ShoppingSearch } from './shoppingTypes';
 import type { ShoppingWatch } from '@inventory-checker/core';
 
@@ -10,6 +10,13 @@ contextBridge.exposeInMainWorld('inventoryDesktop', Object.freeze({
   addItem: (item: NewItem): Promise<Item> => ipcRenderer.invoke('inventory:local', 'add', item),
   deleteItem: (id: string): Promise<void> => ipcRenderer.invoke('inventory:local', 'delete', id),
   notifications: (): Promise<LocalNotification[]> => ipcRenderer.invoke('inventory:local', 'notifications'),
+  clearNotifications: (): Promise<void> => ipcRenderer.invoke('inventory:local', 'clear-notifications'),
+  deleteNotification: (id: string): Promise<void> => ipcRenderer.invoke('inventory:local', 'delete-notification', id),
+  onNotificationOpen: (callback: (target: NotificationTarget | null) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, target: NotificationTarget | null) => callback(target);
+    ipcRenderer.on('inventory:notification-open', listener);
+    return () => ipcRenderer.removeListener('inventory:notification-open', listener);
+  },
   markRead: (id: string): Promise<void> => ipcRenderer.invoke('inventory:local', 'read', id),
   settings: (): Promise<LocalSettings> => ipcRenderer.invoke('inventory:local', 'settings'),
   saveSettings: (value: LocalSettings): Promise<LocalSettings> => ipcRenderer.invoke('inventory:local', 'save-settings', value),

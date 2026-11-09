@@ -13,7 +13,8 @@ app.whenReady().then(async () => {
   const directory = await mkdtemp(join(tmpdir(), 'inventory-electron-test-'));
   const renderer = resolve(__dirname, '../dist/renderer/public/index.html');
   let window;
-  const service = new DesktopService(directory, () => window?.webContents.send('inventory:changed'), () => {});
+  const service = new DesktopService(directory, () => window?.webContents.send('inventory:changed'),
+    target => { window?.show(); window?.webContents.send('inventory:notification-open', target ?? null); });
   try {
     await service.store.initialize();
     await service.store.saveSettings({ notifications_enabled: false, check_interval_minutes: 15, background_enabled: true });
@@ -214,7 +215,7 @@ app.whenReady().then(async () => {
         details.querySelectorAll('.vendor-group').forEach(group => { group.open = true; });
         return { descending, ascending, filtered, empty };
       })()`);
-      assert.deepEqual(offerControls.descending, ['$899.00', '$799.00', '$699.99']);
+      assert.deepEqual(offerControls.descending, ['$799.00', '$699.99', '$899.00']);
       assert.deepEqual(offerControls.ascending, ['$699.99', '$799.00', '$899.00']);
       assert.deepEqual(offerControls.filtered, ['$899.00']);
       assert.equal(offerControls.empty, true);
@@ -259,8 +260,9 @@ app.whenReady().then(async () => {
       const automaticShow = Notification.prototype.show;
       const automaticClose = Notification.prototype.close;
       let automaticAlerts = 0;
+      let nativeAlert;
       try {
-        Notification.prototype.show = function () { automaticAlerts++; setImmediate(() => this.emit('show')); };
+        Notification.prototype.show = function () { automaticAlerts++; nativeAlert = this; setImmediate(() => this.emit('show')); };
         Notification.prototype.close = function () { this.emit('close'); };
         await service.store.saveSettings({ notifications_enabled: true, check_interval_minutes: 15, background_enabled: true });
         await service.checkNow();
@@ -268,6 +270,34 @@ app.whenReady().then(async () => {
         assert.equal((await service.store.notifications()).length, 1);
         await service.checkDue();
         assert.equal(automaticAlerts, 1, 'subsequent minute ticks must neither recheck early nor resend delivered alerts');
+        const target = (await service.store.notifications())[0].target;
+        const linked = await window.webContents.executeJavaScript(`(async () => {
+          [...document.querySelectorAll('nav button')].find(button => button.textContent.includes('Notifications')).click();
+          for (let attempt = 0; attempt < 100; attempt++) {
+            const button = document.querySelector('.notification-open');
+            if (button) { button.click(); break; }
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          for (let attempt = 0; attempt < 100; attempt++) {
+            const card = document.querySelector('.notification-target');
+            if (card && card.querySelector('.watch-details')?.open) return card.id;
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          throw new Error('Notification did not focus the linked shopping card');
+        })()`);
+        assert.equal(linked, 'product-shopping-' + target.id);
+        assert.equal((await service.store.notifications())[0].read, true);
+        await window.webContents.executeJavaScript(`[...document.querySelectorAll('nav button')].find(button => button.textContent.includes('Settings')).click()`);
+        nativeAlert.emit('click');
+        const nativeLinked = await window.webContents.executeJavaScript(`(async () => {
+          for (let attempt = 0; attempt < 100; attempt++) {
+            const card = document.querySelector('.notification-target');
+            if (card) return card.id;
+            await new Promise(resolve => setTimeout(resolve, 20));
+          }
+          throw new Error('OS notification click did not focus a product');
+        })()`);
+        assert.equal(nativeLinked, linked);
       } finally {
         Notification.prototype.show = automaticShow;
         Notification.prototype.close = automaticClose;
@@ -299,6 +329,83 @@ app.whenReady().then(async () => {
     } finally {
       service.shopping.search = originalSearch;
     }
+    const alertCount = (await service.store.notifications()).length;
+    assert.ok(alertCount > 0, 'clear-notification fixture needs saved alerts');
+    await service.store.db.run('INSERT INTO notifications(id,title,body,created_at,target) VALUES(?,?,?,?,?)',
+      [randomUUID(), 'Direct product alert', 'Open direct product', new Date().toISOString(),
+        JSON.stringify({ kind: 'item', id: (await service.store.items())[0].id })]);
+    window.webContents.send('inventory:changed');
+    const individual = await window.webContents.executeJavaScript(`(async () => {
+      const wait = () => new Promise(resolve => setTimeout(resolve, 30));
+      const nav = () => [...document.querySelectorAll('nav button')].find(button => button.textContent.includes('Notifications')).click();
+      nav(); await wait();
+      const button = [...document.querySelectorAll('.notification-open')].find(button => button.textContent.includes('Direct product alert'));
+      if (!button) throw new Error('Direct notification did not render');
+      button.click();
+      for (let attempt = 0; attempt < 100 && !document.querySelector('tr.notification-target'); attempt++) await wait();
+      if (!document.querySelector('tr.notification-target')) throw new Error('Direct alert did not navigate to its row');
+      nav(); await wait();
+      const removed = [...document.querySelectorAll('.notification-open')].find(button => button.textContent.includes('Google reports stock'));
+      removed.click(); await wait();
+      if (!document.body.innerText.includes('has been removed')) throw new Error('Removed product needs explicit fallback');
+      nav(); await wait();
+      const before = (await window.inventoryDesktop.notifications()).length;
+      [...document.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === 'Dismiss Direct product alert').click();
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const count = (await window.inventoryDesktop.notifications()).length;
+        const clearButton = [...document.querySelectorAll('button')].find(button => button.textContent === 'Clear notifications');
+        if (count === before - 1 && clearButton && !clearButton.disabled
+          && ![...document.querySelectorAll('button')].some(button => button.getAttribute('aria-label') === 'Dismiss Direct product alert')) return count;
+        await wait();
+      }
+      throw new Error('Individual dismissal failed');
+    })()`);
+    assert.equal(individual, alertCount);
+    await service.store.db.run('INSERT INTO notifications(id,title,body,created_at) VALUES(?,?,?,?)',
+      [randomUUID(), 'Legacy alert', 'No saved link', new Date().toISOString()]);
+    window.webContents.send('inventory:changed');
+    await window.webContents.executeJavaScript(`(async () => {
+      const wait = () => new Promise(resolve => setTimeout(resolve, 30));
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const button = [...document.querySelectorAll('.notification-open')].find(button => button.textContent.includes('Legacy alert'));
+        if (button) { button.click(); break; }
+        await wait();
+      }
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (document.body.innerText.includes('older notification has no product link')) return;
+        await wait();
+      }
+      throw new Error('Legacy alert must open dashboard without guessing a product');
+    })()`);
+    const cleared = await window.webContents.executeJavaScript(`(async () => {
+      [...document.querySelectorAll('nav button')].find(button => button.textContent.includes('Notifications')).click();
+      const wait = () => new Promise(resolve => setTimeout(resolve, 30));
+      for (let attempt = 0; attempt < 50 && ![...document.querySelectorAll('button')].some(button => button.textContent === 'Clear notifications'); attempt++) await wait();
+      const click = text => {
+        const button = [...document.querySelectorAll('button')].find(button => button.textContent === text);
+        if (!button) throw new Error('Missing notification action: ' + text);
+        button.click();
+      };
+      click('Clear notifications'); await wait();
+      const before = (await window.inventoryDesktop.notifications()).length;
+      click('Cancel'); await wait();
+      if ((await window.inventoryDesktop.notifications()).length !== before) throw new Error('Cancel deleted alerts');
+      click('Clear notifications'); await wait();
+      click('Delete all notifications');
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (document.body.innerText.includes("You're all caught up") && !document.querySelector('.nav-count')) {
+          return { count: (await window.inventoryDesktop.notifications()).length,
+            disabled: [...document.querySelectorAll('button')].find(button => button.textContent === 'Clear notifications').disabled,
+            cursor: getComputedStyle([...document.querySelectorAll('button')].find(button => button.textContent === 'Clear notifications')).cursor };
+        }
+        await wait();
+      }
+      throw new Error('Cleared notifications and unread count did not refresh');
+    })()`);
+    assert.equal(cleared.count, 0);
+    assert.equal(cleared.disabled, true);
+    assert.equal(cleared.cursor, 'default', 'an empty notification list must not show a loading cursor');
+    assert.equal((await service.store.notifications(true)).length, 0);
     const foreign = new BrowserWindow({ show: false, webPreferences: { preload: resolve(__dirname, '../dist/main/preload.js'), sandbox: true } });
     await foreign.loadURL('data:text/html,<h1>Foreign page</h1>');
     const rejected = await foreign.webContents.executeJavaScript(`window.inventoryDesktop.items().then(() => false, () => true)`);

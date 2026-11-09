@@ -21,6 +21,7 @@ export const backupSchema = z.object({
   notifications: z.array(z.object({
     id: identifier, title: z.string().min(1).max(120), body: z.string().max(1000),
     read: z.boolean(), created_at: z.string().datetime(),
+    target: z.object({ kind: z.enum(['item', 'shopping']), id: identifier }).nullable().optional(),
   })).max(1000),
 }).strict();
 

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inventory Checker - token example</title>
+  <link rel="stylesheet" href="./tokens.css">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: var(--padding-page);
+      background: var(--bg-canvas);
+      color: var(--text-primary);
+      font-family: var(--font-ui);
+      font-size: var(--font-size-base);
+      line-height: var(--line-height-base);
+      letter-spacing: var(--letter-spacing-base);
+    }
+    main { max-width: var(--size-card-max); margin-inline: auto; }
+    h1 { font-size: var(--font-size-xl); line-height: var(--line-height-xl); letter-spacing: var(--letter-spacing-xl); }
+    p { margin: 0; }
+    .product-card {
+      display: grid;
+      gap: var(--gap-stack);
+      min-width: 0;
+      padding: var(--padding-component);
+      border: var(--border-width) solid var(--border-default);
+      border-radius: var(--radius-card);
+      background: var(--bg-surface);
+      box-shadow: var(--elevation-card);
+      overflow-wrap: anywhere;
+    }
+    .product-card h2 {
+      margin: 0;
+      font-size: var(--font-size-lg);
+      line-height: var(--line-height-lg);
+      letter-spacing: var(--letter-spacing-lg);
+      font-weight: var(--font-weight-semibold);
+    }
+    .tags { display: flex; flex-wrap: wrap; gap: var(--gap-inline); }
+    .badge {
+      padding: var(--space-1) var(--space-2);
+      border: var(--border-width) solid var(--status-unknown-border);
+      border-radius: var(--radius-badge);
+      background: var(--status-unknown-bg);
+      color: var(--status-unknown-text);
+      font-size: var(--font-size-sm);
+      line-height: var(--line-height-sm);
+      letter-spacing: var(--letter-spacing-sm);
+      font-weight: var(--font-weight-semibold);
+      font-variant-numeric: var(--font-numerals);
+    }
+    .badge--stock { background: var(--status-success-bg); color: var(--status-success-text); border-color: var(--status-success-border); }
+    .badge--sale { background: var(--status-sale-bg); color: var(--status-sale-text); border-color: var(--status-sale-border); }
+    .muted { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
+    label { display: grid; gap: var(--gap-stack-tight); color: var(--text-secondary); font-weight: var(--font-weight-medium); }
+    input {
+      width: 100%;
+      min-width: 0;
+      min-height: var(--size-control-min);
+      padding: var(--padding-input-block) var(--padding-input-inline);
+      border: var(--border-width) solid var(--border-control);
+      border-radius: var(--radius-control);
+      background: var(--bg-inset);
+      color: var(--text-primary);
+      font: inherit;
+      transition: border-color var(--duration-fast) var(--ease-standard);
+    }
+    input::placeholder { color: var(--text-muted); opacity: 1; }
+    input:hover { border-color: var(--border-hover); }
+    input:focus-visible, summary:focus-visible, button:focus-visible {
+      outline: var(--focus-width) solid var(--focus-color);
+      outline-offset: var(--focus-offset);
+    }
+    summary { min-height: var(--size-control-min); padding-block: var(--space-2); cursor: pointer; color: var(--text-link); }
+    details[open] > summary { margin-bottom: var(--gap-stack-tight); }
+    button {
+      justify-self: start;
+      min-height: var(--size-control-min);
+      padding: var(--padding-input-block) var(--padding-input-inline);
+      border: var(--border-width) solid var(--border-default);
+      border-radius: var(--radius-control);
+      background: var(--bg-disabled);
+      color: var(--text-disabled);
+      font: inherit;
+    }
+    button:disabled { cursor: default; }
+    code { font-family: var(--font-code); }
+    @media (forced-colors: active) {
+      input:focus-visible, summary:focus-visible, button:focus-visible { outline-color: Highlight; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Inventory Checker</h1>
+    <article class="product-card" aria-labelledby="product-name">
+      <h2 id="product-name">MacBook Neo - 256GB, Indigo</h2>
+      <div class="tags" aria-label="Example product status">
+        <span class="badge badge--stock">In Stock</span>
+        <span class="badge badge--sale">On Sale</span>
+        <span class="badge">Lowest found: $699.00</span>
+      </div>
+      <p class="muted">Illustrative data only. Labels describe observations, not guaranteed live inventory.</p>
+      <label for="reference">Reference URL
+        <input id="reference" type="url" placeholder="https://retailer.example/product" aria-describedby="reference-help">
+      </label>
+      <p class="muted" id="reference-help">Example input only; this page does not save or fetch the URL.</p>
+      <details>
+        <summary>Apple - 2 example listings</summary>
+        <p>Use <code>--gap-stack</code> for list spacing and <code>--text-muted</code> for supporting details.</p>
+      </details>
+      <button type="button" disabled>No pending changes</button>
+    </article>
+  </main>
+</body>
+</html>

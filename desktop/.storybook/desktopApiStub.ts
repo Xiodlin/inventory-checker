@@ -4,7 +4,9 @@ import type {
   Item,
   PricePoint,
   SettingsData,
+  ShoppingWatch,
 } from '../src/renderer/types';
+import type { NotificationTarget } from '@inventory-checker/core';
 
 export const sampleItems: Item[] = [
   {
@@ -60,6 +62,7 @@ export const sampleNotifications: InventoryNotification[] = [
     id: 'alert-1', title: 'WH-1000XM5 is back in stock',
     body: 'Amazon now lists Sony WH-1000XM5 as in stock at $328.00.',
     read: false, created_at: '2026-11-07T15:31:00.000Z', delivery_error: null,
+    target: { kind: 'item', id: 'item-1' },
   },
   {
     id: 'alert-2', title: 'iPhone 17 Pro pickup available',
@@ -80,22 +83,69 @@ export const sampleSettings: SettingsData = {
   background_enabled: true,
 };
 
+export const sampleWatches: ShoppingWatch[] = [
+  {
+    id: 'watch-1', input: { product: 'MacBook Neo', variants: ['256GB', 'Indigo'] }, enabled: true,
+    last_checked_at: '2026-11-08T15:30:00.000Z', error: null,
+    result: { id: 'search-1', input: { product: 'MacBook Neo', variants: ['256GB', 'Indigo'] },
+      checked_at: '2026-11-08T15:30:00.000Z', error: null,
+      offers: [
+        { title: 'MacBook Neo 256GB Indigo', seller: 'eBay', price: '$2,099.00', url: 'https://www.ebay.com/itm/1',
+          match: 'text-match', missing: [], availability: 'unknown', availability_text: 'No unambiguous stock label' },
+        { title: 'MacBook Neo 256GB Indigo', seller: 'Apple', price: '$1,999.00', url: 'https://www.apple.com/shop/product/abc12/a',
+          match: 'text-match', missing: [], availability: 'reported-in-stock', availability_text: 'Pickup today',
+          sale_text: '20% off', details: ['Pickup today', 'Free returns'],
+          verification: { status: 'verified', message: 'Matching product observed on retailer page', in_stock: true, price: 1999 } },
+        { title: 'MacBook Neo 256GB Indigo', seller: 'Apple Education Store', price: '$1,999.00', url: 'https://www.google.com/aclk?adurl=',
+          match: 'text-match', missing: [], availability: 'reported-in-stock', availability_text: 'Pickup tomorrow',
+          verification: { status: 'unsupported', message: 'Opaque Google advertising destination cannot be verified' } },
+        { title: 'MacBook Neo 256GB Indigo', seller: 'eBay', price: '$2,599.00', url: 'https://www.ebay.com/itm/2',
+          match: 'text-match', missing: [], availability: 'reported-out-of-stock', availability_text: 'Out of stock' },
+        { title: 'MacBook Neo 256GB Indigo', seller: 'eBay', price: '$2,989.00', url: 'https://www.ebay.com/itm/3',
+          match: 'text-match', missing: [], availability: 'unknown', availability_text: 'No unambiguous stock label' },
+        { title: 'MacBook Neo 256GB Indigo', seller: 'Unassessed shop', price: '$2,199.00', url: 'https://unassessed.example/product',
+          match: 'text-match', missing: [], availability: 'unknown', availability_text: 'No unambiguous stock label',
+          verification: { status: 'failed', message: 'Retailer did not publish usable product metadata' } },
+        { title: 'Case for MacBook Neo 256GB Indigo', seller: 'Target', price: '$29.00', url: 'https://www.target.com/p/case/-/A-12345',
+          match: 'uncertain', missing: ['Product, not an accessory'], availability: 'reported-in-stock', availability_text: 'In stock' },
+      ] },
+  },
+];
+
 /**
  * The renderer talks to Electron through `window.inventoryDesktop` (see
  * src/renderer/api.ts) instead of HTTP, so stories stub that bridge rather
  * than mocking network requests.
  */
-export function installDesktopApiStub(overrides: Partial<DesktopApi> = {}): DesktopApi {
+export function installDesktopApiStub(overrides: Partial<DesktopApi> = {}, initial: {
+  items?: Item[]; notifications?: InventoryNotification[]; watches?: ShoppingWatch[]; settings?: SettingsData;
+} = {}): DesktopApi {
+  let items = structuredClone(initial.items ?? sampleItems);
+  let notifications = structuredClone(initial.notifications ?? sampleNotifications);
+  let watches = structuredClone(initial.watches ?? sampleWatches);
+  let settings = { ...(initial.settings ?? sampleSettings) };
+  const listeners = new Set<() => void>();
+  const openListeners = new Set<(target: NotificationTarget | null) => void>();
+  const changed = () => listeners.forEach(listener => listener());
   const api: DesktopApi = {
-    items: async () => sampleItems,
-    item: async id => sampleItems.find(item => item.id === id) ?? sampleItems[0],
+    items: async () => structuredClone(items),
+    item: async id => {
+      const item = items.find(item => item.id === id);
+      if (!item) throw new Error('Product not found');
+      return structuredClone(item);
+    },
     prices: async () => samplePrices,
     addItem: async item => ({ ...sampleItems[0], ...item, id: 'item-new' }),
-    deleteItem: async () => {},
-    notifications: async () => sampleNotifications,
-    markRead: async () => {},
-    settings: async () => sampleSettings,
-    saveSettings: async value => value,
+    deleteItem: async id => { items = items.filter(item => item.id !== id); changed(); },
+    notifications: async () => structuredClone(notifications),
+    clearNotifications: async () => { notifications = []; changed(); },
+    deleteNotification: async id => { notifications = notifications.filter(alert => alert.id !== id); changed(); },
+    onNotificationOpen: callback => { openListeners.add(callback); return () => { openListeners.delete(callback); }; },
+    markRead: async id => {
+      notifications = notifications.map(alert => alert.id === id ? { ...alert, read: true } : alert); changed();
+    },
+    settings: async () => ({ ...settings }),
+    saveSettings: async value => { settings = { ...value }; changed(); return { ...settings }; },
     status: async () => ({ last_run_at: '2026-11-07T15:30:00.000Z', error: null }),
     check: async () => ({ checked: 4, succeeded: 3, failed: 1, remaining: 0, reason: 'complete' }),
     checkDue: async () => ({ checked: 4, succeeded: 3, failed: 1, remaining: 0, reason: 'complete' }),
@@ -106,12 +156,15 @@ export function installDesktopApiStub(overrides: Partial<DesktopApi> = {}): Desk
       error: 'Storybook does not perform live Google searches.' }),
     shoppingHistory: async () => [],
     clearShoppingHistory: async () => {},
-    shoppingWatches: async () => [],
-    saveShoppingWatch: async () => {},
-    removeShoppingWatch: async () => {},
+    shoppingWatches: async () => structuredClone(watches),
+    saveShoppingWatch: async input => {
+      watches = [...watches, { id: `watch-${watches.length + 1}`, input, enabled: true,
+        last_checked_at: null, error: null, result: null }]; changed();
+    },
+    removeShoppingWatch: async id => { watches = watches.filter(watch => watch.id !== id); changed(); },
     exportBackup: async () => true,
     importBackup: async () => true,
-    onChanged: () => () => {},
+    onChanged: callback => { listeners.add(callback); return () => { listeners.delete(callback); }; },
     ...overrides,
   };
   window.inventoryDesktop = api;

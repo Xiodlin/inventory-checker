@@ -2,10 +2,11 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { errorMessage, localApi } from '../api';
 import type { ShoppingOffer, ShoppingWatch } from '../types';
 import { shoppingProductStatus, shoppingSellerEvidence, visibleShoppingOffers, groupShoppingOffers, defaultOfferView,
-  offerSortOptions, sellerFilterOptions, type OfferView } from '@inventory-checker/core/src/shopping';
+  offerSortOptions, sellerFilterOptions, type OfferView, type OfferSort } from '@inventory-checker/core/src/shopping';
 
-export default function ShoppingDiscovery({ existingProducts, existingCount = 0 }: {
+export default function ShoppingDiscovery({ existingProducts, existingCount = 0, focus }: {
   existingProducts?: ReactNode; existingCount?: number;
+  focus?: { id: string; request: number } | null;
 }) {
   const [watches, setWatches] = useState<ShoppingWatch[]>([]);
   const [views, setViews] = useState<Record<string, OfferView>>({});
@@ -14,6 +15,15 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
   const [message, setMessage] = useState('');
   const [interval, setIntervalMinutes] = useState<number>();
   const [automatic, setAutomatic] = useState(true);
+  useEffect(() => {
+    if (!focus) return;
+    const card = document.getElementById(`product-shopping-${focus.id}`);
+    if (!card) return;
+    const details = card.querySelector<HTMLDetailsElement>('.watch-details');
+    if (details) details.open = true;
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    card.focus({ preventScroll: true });
+  }, [focus, watches]);
   async function refresh() {
     const [saved, settings] = await Promise.all([localApi().shoppingWatches(), localApi().settings()]);
     setWatches(saved); setIntervalMinutes(settings.check_interval_minutes); setAutomatic(settings.background_enabled);
@@ -61,8 +71,8 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
       <label>Copy this link into your browser<input readOnly value={offer.url} onClick={event => event.currentTarget.select()} /></label>
     </details>
   </li>;
-  const renderVendors = (offers: ShoppingOffer[]) => <div className="vendor-groups">
-    {groupShoppingOffers(offers).map(group => <details className="vendor-group" key={group.vendor.toLowerCase()}>
+  const renderVendors = (offers: ShoppingOffer[], sort: OfferSort) => <div className="vendor-groups">
+    {groupShoppingOffers(offers, sort).map(group => <details className="vendor-group" key={group.vendor.toLowerCase()}>
       <summary>{group.vendor}<span className="count">{group.offers.length} {group.offers.length === 1 ? 'listing' : 'listings'}</span></summary>
       <ul className="discovery-offers">{group.offers.map(renderOffer)}</ul>
     </details>)}
@@ -91,7 +101,7 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
         const status = shoppingProductStatus(watch.result);
         const view = views[watch.id] ?? defaultOfferView;
         const offers = visibleShoppingOffers(watch.result?.offers ?? [], view);
-        return <li className="discovery-card" key={watch.id}>
+        return <li className={`discovery-card${focus?.id === watch.id ? ' notification-target' : ''}`} key={watch.id} id={`product-shopping-${watch.id}`} tabIndex={-1}>
         <h3>{watch.input.product} · {watch.input.variants.join(', ')}</h3>
         <div className="product-tags" aria-label="Product status">
           <span className={`badge${status.stock === 'in-stock' ? ' success' : status.stock === 'out-of-stock' ? ' unavailable' : ''}`}>
@@ -120,10 +130,11 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
             </div>
             <p className="muted">Evidence labels are not legitimacy ratings or safety guarantees. Seller names on opaque Google links are unverified; recognized marketplaces do not establish individual sellers' reliability. Filters only change this view, not monitoring or product tags.</p>
             <h3>Required text matches (not retailer-verified)</h3>
-            {renderVendors(offers.filter(offer => offer.match === 'text-match'))}
+            <p className="muted">Price sorting puts vendors with the lowest listed price first; listings within each vendor follow the selected direction.</p>
+            {renderVendors(offers.filter(offer => offer.match === 'text-match'), view.sort)}
             {!offers.some(offer => offer.match === 'text-match') && <p className="muted">No required-text matches for this filter.</p>}
             <details className="discovery-uncertain"><summary>Uncertain matches ({offers.filter(offer => offer.match === 'uncertain').length})</summary>
-              {renderVendors(offers.filter(offer => offer.match === 'uncertain'))}
+              {renderVendors(offers.filter(offer => offer.match === 'uncertain'), view.sort)}
             </details>
           </> : <p className="muted">No successful check yet.</p>}
           {watch.input.example_url && <p className="muted discovery-reference">Reference: {watch.input.example_url}</p>}

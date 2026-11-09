@@ -38,6 +38,7 @@ test('saved searches use retailer settings, retry empty matches and notify only 
     await shopping.tick();
     assert.equal((await store.notifications()).length, 1);
     assert.match((await store.notifications())[0].body, /not retailer-verified/);
+    assert.deepEqual((await store.notifications())[0].target, { kind: 'shopping', id: (await shopping.watches())[0].id });
     time += 5 * 60000;
     result = outcome([{ ...offer, price: '$599.00', url: 'https://www.google.com/aclk?token=changed' }]);
     await shopping.tick();

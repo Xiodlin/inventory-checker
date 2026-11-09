@@ -12,7 +12,8 @@
     "test": "electron test/local-smoke.cjs && electron test/shopping-smoke.cjs",
     "package": "npm run build && electron-builder",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "test:storybook": "vitest run --project storybook"
   },
   "keywords": [],
   "author": "",

@@ -16,6 +16,13 @@ export type NewItem = Pick<Item, 'retailer' | 'notify_stock' | 'notify_price' | 
 };
 export interface LocalNotification {
   id: string; title: string; body: string; read: boolean; created_at: string; delivery_error: string | null;
+  target?: NotificationTarget | null;
+}
+export interface NotificationTarget { kind: 'item' | 'shopping'; id: string }
+export function notificationTarget(value: unknown): NotificationTarget | null {
+  if (!value || typeof value !== 'object' || !('kind' in value) || !('id' in value)) return null;
+  return (value.kind === 'item' || value.kind === 'shopping') && typeof value.id === 'string'
+    && value.id.length > 0 && value.id.length <= 100 ? { kind: value.kind, id: value.id } : null;
 }
 export interface PricePoint {
   id: string; price: number | null; in_stock: boolean; pickup_stores: PickupStore[]; checked_at: string;

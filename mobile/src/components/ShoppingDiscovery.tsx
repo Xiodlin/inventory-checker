@@ -2,14 +2,16 @@ import { useCallback, useState, type ReactNode } from 'react';
 import { Button, Pressable, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { shoppingProductStatus, shoppingSellerEvidence, visibleShoppingOffers, groupShoppingOffers, defaultOfferView,
-  offerSortOptions, sellerFilterOptions, type OfferView, type ShoppingWatch } from '@inventory-checker/core';
+  offerSortOptions, sellerFilterOptions, type OfferView, type ShoppingWatch, type NotificationTarget } from '@inventory-checker/core';
 import { localRuntime } from '../services/localRuntime';
 import { useSession } from '../session';
 import { errorMessage, ui } from '../ui';
 import CollapsibleSection from './CollapsibleSection';
+import NotificationCardFocus, { type ProductView } from './NotificationCardFocus';
 
-export default function ShoppingDiscovery({ existingProducts, existingCount = 0 }: {
+export default function ShoppingDiscovery({ existingProducts, existingCount = 0, focus, onReveal }: {
   existingProducts?: ReactNode; existingCount?: number;
+  focus?: { target: NotificationTarget; request: number } | null; onReveal?: (view: ProductView) => void;
 }) {
   const { revision } = useSession();
   const [product, setProduct] = useState('');
@@ -59,14 +61,16 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
       {!!message && <Text accessibilityLiveRegion="polite">{message}</Text>}
     </CollapsibleSection>
     {!!error && <Text style={ui.error} accessibilityRole="alert">{error}</Text>}
-    <CollapsibleSection title={`Tracked products (${watches.length + existingCount})`} initiallyOpen>
+    <CollapsibleSection title={`Tracked products (${watches.length + existingCount})`} initiallyOpen revealKey={focus?.request}>
       <Text>{automatic ? 'Automatic search checks enabled' : 'Automatic search checks paused'} · Every {interval ?? 'configured'} minutes. Google checks run only while the app is open and active.</Text>
       {!watches.length && !existingCount && <Text>No products yet. Add one above to start monitoring.</Text>}
       {watches.map(watch => {
         const status = shoppingProductStatus(watch.result);
         const view = views[watch.id] ?? defaultOfferView;
         const offers = visibleShoppingOffers(watch.result?.offers ?? [], view);
-        return <View key={watch.id} style={{ gap: 10, padding: 12, borderWidth: 1, borderColor: '#aab8c5', borderRadius: 8 }}>
+        const selected = focus?.target.kind === 'shopping' && focus.target.id === watch.id;
+        return <NotificationCardFocus key={watch.id} active={selected} request={focus?.request} onReveal={onReveal}>
+        <View style={{ gap: 10, padding: 12, borderWidth: 1, borderColor: '#aab8c5', borderRadius: 8 }}>
         <Text style={ui.label}>{watch.input.product} · {watch.input.variants.join(', ')}</Text>
         <View style={ui.tags} accessibilityLabel="Product status">
           <Text style={[ui.tag, status.stock === 'in-stock' ? ui.tagStock : status.stock === 'out-of-stock' ? ui.tagUnavailable : undefined]}>
@@ -80,11 +84,12 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
         </View>
         <Text>Google Shopping · Last checked: {watch.last_checked_at ? new Date(watch.last_checked_at).toLocaleString() : 'Pending check'}</Text>
         {!!watch.error && <Text style={ui.error}>{watch.error}</Text>}
-        <CollapsibleSection title="Details and latest offers">
+        <CollapsibleSection title="Details and latest offers" revealKey={selected ? focus?.request : undefined}>
           {watch.result ? <>
             <Text>Last successful observation: {new Date(watch.result.checked_at).toLocaleString()}. Missing offers do not prove out-of-stock inventory.</Text>
             <CollapsibleSection title="Sort offers & seller confidence">
               <Text style={ui.label}>Sort offers</Text>
+              <Text>Price sorting puts vendors with the lowest listed price first; listings within each vendor follow the selected direction.</Text>
               <View style={ui.tags}>{offerSortOptions.map(option => <Pressable key={option.value}
                 accessibilityRole="button" accessibilityState={{ selected: view.sort === option.value }}
                 style={{ minHeight: 44, justifyContent: 'center' }}
@@ -102,7 +107,7 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
             </CollapsibleSection>
             <Text style={ui.label}>Required text matches (not retailer-verified)</Text>
             {!offers.some(offer => offer.match === 'text-match') && <Text>No required-text matches for this filter.</Text>}
-            {groupShoppingOffers(offers).map(group => <CollapsibleSection key={group.vendor.toLowerCase()}
+            {groupShoppingOffers(offers, view.sort).map(group => <CollapsibleSection key={group.vendor.toLowerCase()}
               title={`${group.vendor} · ${group.offers.length} ${group.offers.length === 1 ? 'listing' : 'listings'}`}>
             {group.offers.map(offer => <CollapsibleSection key={`${offer.url}-${offer.title}-${offer.price}`}
               title={`${offer.match === 'uncertain' ? 'Uncertain: ' : ''}${offer.title} · ${offer.price}`}>
@@ -125,7 +130,7 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0 
         <Button title="Remove product" disabled={busy} onPress={() => void action(async () => {
           await (await localRuntime()).shopping.remove(watch.id);
         })} />
-      </View>;
+      </View></NotificationCardFocus>;
       })}
       {existingProducts}
       <CollapsibleSection title="Monitoring and storage details">

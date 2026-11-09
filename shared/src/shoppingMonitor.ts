@@ -101,10 +101,10 @@ export class ShoppingMonitor {
       const fresh = available.filter((offer, index) => !previous.includes(offerKey(offer))
         && available.findIndex(other => offerKey(other) === offerKey(offer)) === index);
       if (fresh.length) {
-        await tx.run('INSERT INTO notifications(id,title,body,created_at) VALUES(?,?,?,?)',
+        await tx.run('INSERT INTO notifications(id,title,body,created_at,target) VALUES(?,?,?,?,?)',
           [this.uuid(), `Google reports stock: ${watch.input.product}`,
             fresh.slice(0, 5).map(offer => `${offer.title} — ${offer.seller} · ${offer.price} · ${offer.availability_text}`).join('\n')
-              + '\nGoogle-reported, not retailer-verified. Open watchlist details to review.', time]);
+              + '\nGoogle-reported, not retailer-verified. Open watchlist details to review.', time, JSON.stringify({ kind: 'shopping', id: watch.id })]);
       }
       await tx.run('UPDATE shopping_watches SET last_checked_at=?,error=NULL,result=?,stock=? WHERE id=?',
         [time, JSON.stringify(result), JSON.stringify(stock), watch.id]);

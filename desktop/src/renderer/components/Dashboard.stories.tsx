@@ -4,8 +4,9 @@ import { sampleItems } from '../../../.storybook/desktopApiStub';
 import Dashboard from './Dashboard';
 
 const meta = {
+  title: 'Legacy/Direct retailer products',
   component: Dashboard,
-  tags: ['ai-generated'],
+  tags: ['autodocs'],
   args: { items: sampleItems, onDelete: fn() },
 } satisfies Meta<typeof Dashboard>;
 

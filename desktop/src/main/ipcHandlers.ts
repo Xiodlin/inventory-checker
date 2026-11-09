@@ -14,6 +14,16 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null, rende
       case 'add': return service.store.addItem(payload);
       case 'delete': if (typeof payload === 'string') return service.store.deleteItem(payload); break;
       case 'notifications': return service.store.notifications();
+      case 'delete-notification': if (typeof payload === 'string') {
+        await service.store.deleteNotification(payload);
+        window.webContents.send('inventory:changed');
+        return;
+      } break;
+      case 'clear-notifications': {
+        await service.store.clearNotifications();
+        window.webContents.send('inventory:changed');
+        return;
+      }
       case 'read': if (typeof payload === 'string') return service.store.markRead(payload); break;
       case 'settings': return service.store.settings();
       case 'save-settings': return service.store.saveSettings(payload);

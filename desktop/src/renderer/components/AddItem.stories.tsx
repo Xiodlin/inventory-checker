@@ -3,8 +3,9 @@ import { expect, fn } from 'storybook/test';
 import AddItem from './AddItem';
 
 const meta = {
+  title: 'Legacy/Direct add form',
   component: AddItem,
-  tags: ['ai-generated'],
+  tags: ['autodocs'],
   args: { onAdd: fn() },
 } satisfies Meta<typeof AddItem>;
 

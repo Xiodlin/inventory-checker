@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { checkResultMessage } from '@inventory-checker/core/dist/types';
+import { checkResultMessage, notificationTarget, type NotificationTarget } from '@inventory-checker/core/src/types';
 import { errorMessage, localApi } from './api';
 import Dashboard from './components/Dashboard';
 import NotificationPanel from './components/NotificationPanel';
@@ -21,6 +21,32 @@ export default function App() {
   const [error, setError] = useState('');
   const [monitorError, setMonitorError] = useState('');
   const [lastRun, setLastRun] = useState<string | null>(null);
+  const [focus, setFocus] = useState<{ target: NotificationTarget; request: number } | null>(null);
+  const [navigationMessage, setNavigationMessage] = useState('');
+  const openTarget = useCallback(async (value: NotificationTarget | null) => {
+    const target = notificationTarget(value);
+    setPage('dashboard'); setFocus(null);
+    if (!target) { setNavigationMessage('This older notification has no product link.'); return; }
+    const api = localApi();
+    const exists = target.kind === 'item' ? (await api.items()).some(item => item.id === target.id)
+      : (await api.shoppingWatches()).some(watch => watch.id === target.id);
+    setNavigationMessage(exists ? '' : 'The product linked to this notification has been removed.');
+    if (exists) setFocus({ target, request: Date.now() });
+  }, []);
+  useEffect(() => localApi().onNotificationOpen(target => {
+    void openTarget(target).catch(failure => setError(errorMessage(failure)));
+  }), [openTarget]);
+  useEffect(() => {
+    if (!focus || focus.target.kind !== 'item' || page !== 'dashboard') return;
+    const card = document.getElementById(`product-${focus.target.kind}-${focus.target.id}`);
+    if (!card) return;
+    const details = card.querySelector<HTMLDetailsElement>('.watch-details');
+    if (details) details.open = true;
+    card.classList.add('notification-target');
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    card.focus({ preventScroll: true });
+    return () => card.classList.remove('notification-target');
+  }, [focus, page, items, watches]);
   const refresh = useCallback(async () => {
     try {
       const api = localApi();
@@ -40,6 +66,13 @@ export default function App() {
   }, [refresh]);
   async function remove(id: string) { await localApi().deleteItem(id); await refresh(); }
   async function read(id: string) { await localApi().markRead(id); await refresh(); }
+  async function clearNotifications() { await localApi().clearNotifications(); await refresh(); }
+  async function dismissNotification(id: string) { await localApi().deleteNotification(id); await refresh(); }
+  async function openNotification(alert: InventoryNotification) {
+    if (!alert.read) await localApi().markRead(alert.id);
+    await openTarget(alert.target ?? null);
+    await refresh();
+  }
   async function save(value: SettingsData) { await localApi().saveSettings(value); await refresh(); }
   async function check() {
     setChecking(true); setCheckMessage('');
@@ -69,13 +102,16 @@ export default function App() {
       <button disabled={loading || checking} onClick={() => void check()}>{checking ? 'Checking…' : 'Check now'}</button></header>
       {checkMessage && <p role="status" className="muted">{checkMessage}</p>}
       {error && <p role="alert" className="error">{error}</p>}
+      {navigationMessage && <p role="status" className="muted">{navigationMessage}</p>}
       {monitorError && <p role="alert" className="error">{monitorError}</p>}
       {loading && <p role="status" className="loading">Opening local storage…</p>}
       {page === 'dashboard' && <><div className="stats"><article><span>TRACKED PRODUCTS</span><strong>{items.length + watches.length}</strong></article>
         <article><span>LAST REPORTED IN STOCK</span><strong>{items.filter(item => item.in_stock).length + watches.filter(watch => watch.result?.offers.some(offer => offer.match === 'text-match' && offer.availability === 'reported-in-stock')).length}</strong></article>
         <article><span>UNREAD ALERTS</span><strong>{unread}</strong></article></div>
-        <ShoppingDiscovery existingCount={items.length} existingProducts={items.length ? <Dashboard embedded items={items} onDelete={remove} /> : undefined} /></>}
-      {page === 'notifications' && <NotificationPanel notifications={notifications} onRead={read} />}
+        <ShoppingDiscovery focus={focus?.target.kind === 'shopping' ? { id: focus.target.id, request: focus.request } : null}
+          existingCount={items.length} existingProducts={items.length ? <Dashboard embedded items={items} onDelete={remove} /> : undefined} /></>}
+      {page === 'notifications' && <NotificationPanel notifications={notifications} onRead={read} onClear={clearNotifications}
+        onDismiss={dismissNotification} onOpen={openNotification} />}
       {page === 'settings' && settings && <Settings settings={settings} onSave={save} />}
       <footer>Checks continue in the tray while this computer is awake. System sleep pauses checks; they catch up on wake. Exit stops monitoring.</footer>
     </main>

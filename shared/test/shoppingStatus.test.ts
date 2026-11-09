@@ -104,3 +104,23 @@ test('vendor grouping combines seller aliases and retains every listing in sorte
   assert.deepEqual(groupShoppingOffers([]), []);
   assert.equal(offers[0].seller, 'Apple Education Store');
 });
+
+test('price sorting ranks vendors by their minimum price independently of listing direction', () => {
+  const base = offer('');
+  const offers = [
+    { ...base, seller: 'eBay', price: '$2,099.00' },
+    { ...base, seller: 'eBay', price: '$2,599.00' },
+    { ...base, seller: 'eBay', price: '$2,989.00' },
+    { ...base, seller: 'Apple', price: '$1,999.00' },
+    { ...base, seller: 'Apple', price: '$1,999.00' },
+    { ...base, seller: 'Missing price', price: 'Unavailable' },
+  ];
+  for (const sort of ['price-asc', 'price-desc'] as const) {
+    const groups = groupShoppingOffers(visibleShoppingOffers(offers, { sort, seller: 'all' }), sort);
+    assert.deepEqual(groups.map(group => group.vendor), ['Apple', 'eBay', 'Missing price']);
+    assert.deepEqual(groups.map(group => group.lowestPrice), [1999, 2099, null]);
+    assert.deepEqual(groups[1].offers.map(offer => offer.price),
+      sort === 'price-asc' ? ['$2,099.00', '$2,599.00', '$2,989.00'] : ['$2,989.00', '$2,599.00', '$2,099.00']);
+  }
+  assert.deepEqual(groupShoppingOffers(offers).map(group => group.vendor), ['eBay', 'Apple', 'Missing price']);
+});

@@ -25,6 +25,7 @@ test('SQLite watchlist, history, alerts and settings survive reopening without a
     assert.equal((await store.prices(item.id)).length, 2);
     assert.equal((await store.notifications()).length, 1);
     const alert = (await store.notifications())[0];
+    assert.deepEqual(alert.target, { kind: 'item', id: item.id });
     await store.checkFailed(item.id, 'Apple pickup returned HTTP 541');
     await store.saveSettings({ notifications_enabled: false, check_interval_minutes: 5, background_enabled: false });
     await database.close();
@@ -37,6 +38,7 @@ test('SQLite watchlist, history, alerts and settings survive reopening without a
     assert.equal((await reopened.settings()).check_interval_minutes, 5);
     await reopened.markRead(alert.id);
     assert.equal((await reopened.notifications())[0].read, true);
+    assert.deepEqual((await reopened.notifications())[0].target, { kind: 'item', id: item.id });
     await reopened.deleteItem(item.id);
     assert.equal((await reopened.items()).length, 0);
     assert.equal((await database.all('SELECT * FROM history')).length, 0);
@@ -69,6 +71,69 @@ test('transactional snapshots reject invalid pickup results and retain the previ
       throw new Error('Rollback fixture');
     }), /Rollback/);
     assert.equal((await store.items()).length, 1);
+  } finally { await db.close(); }
+});
+
+test('clearing alerts removes read, unread, and pending entries without resetting monitoring or deduplication', async () => {
+  const db = new DesktopDatabase(':memory:');
+  try {
+    const store = new LocalStore(db, randomUUID);
+    await store.initialize();
+    const item = await store.addItem({ retailer: 'target', sku: '91122045', notify_stock: true, notify_price: false, fulfillment: 'shipping' });
+    await store.applyResult(item.id, { price: 699, in_stock: false });
+    await store.applyResult(item.id, { price: 699, in_stock: true });
+    const first = (await store.notifications())[0];
+    await store.markRead(first.id);
+    await store.delivery(first.id, null);
+    await db.transaction(async tx => {
+      for (let index = 0; index < 1001; index++) {
+        await tx.run('INSERT INTO notifications(id,title,body,created_at) VALUES(?,?,?,?)',
+          [randomUUID(), 'Fixture', 'Pending alert', new Date().toISOString()]);
+      }
+    });
+
+    assert.equal((await store.notifications()).length, 1000);
+    const settings = await store.settings();
+    const history = await store.prices(item.id);
+    await store.clearNotifications();
+    assert.deepEqual(await store.notifications(), []);
+    assert.deepEqual(await store.notifications(true), []);
+    assert.equal((await db.all('SELECT id FROM notifications')).length, 0);
+    assert.deepEqual(await store.settings(), settings);
+    assert.deepEqual(await store.prices(item.id), history);
+    assert.equal((await store.item(item.id)).in_stock, true);
+    await store.clearNotifications();
+    await store.applyResult(item.id, { price: 699, in_stock: true });
+    assert.equal((await store.notifications()).length, 0, 'unchanged stock must not recreate cleared alerts');
+    await store.applyResult(item.id, { price: 699, in_stock: false });
+    await store.applyResult(item.id, { price: 699, in_stock: true });
+    assert.equal((await store.notifications()).length, 1, 'future stock changes still create alerts');
+    await store.deleteNotification((await store.notifications())[0].id);
+    await store.applyResult(item.id, { price: 699, in_stock: true });
+    assert.equal((await store.notifications()).length, 0, 'individual dismissal must not reset stock-change deduplication');
+  } finally { await db.close(); }
+});
+
+test('notification migration retains legacy alerts and individual dismissal does not delete other alerts', async () => {
+  const db = new DesktopDatabase(':memory:');
+  try {
+    await db.exec(`CREATE TABLE notifications (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0, delivery_error TEXT
+    ); PRAGMA user_version=1;`);
+    const first = randomUUID(), second = randomUUID();
+    for (const id of [first, second]) await db.run('INSERT INTO notifications(id,title,body,created_at) VALUES(?,?,?,?)',
+      [id, 'Legacy alert', 'Body', new Date().toISOString()]);
+    const store = new LocalStore(db, randomUUID);
+    await store.initialize(); await store.initialize();
+    assert.equal((await store.notifications()).length, 2);
+    assert.equal((await store.notifications())[0].target, null);
+    await store.deleteNotification(first);
+    assert.deepEqual((await store.notifications()).map(alert => alert.id), [second]);
+    assert.deepEqual((await store.notifications(true)).map(alert => alert.id), [second]);
+    await store.deleteNotification(first);
+    assert.equal((await store.notifications()).length, 1);
+    await assert.rejects(store.deleteNotification(''), /./);
   } finally { await db.close(); }
 });
 
@@ -252,6 +317,7 @@ test('local backups transfer watchlists and history without accounts or credenti
     assert.equal((await target.item(item.id)).current_price, 90);
     assert.equal((await target.prices(item.id)).length, 1);
     assert.equal((await target.notifications()).length, 1);
+    assert.deepEqual((await target.notifications())[0].target, { kind: 'item', id: item.id });
     assert.equal((await target.notifications(true)).length, 0, 'imported alerts must not be re-delivered');
     const invalid = JSON.parse(backup);
     invalid.items.push({ ...invalid.items[0], id: randomUUID() });

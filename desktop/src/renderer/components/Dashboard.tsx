@@ -34,7 +34,7 @@ export default function Dashboard({ items, onDelete, embedded = false }: {
     {!embedded && <div className="section-heading"><div><span className="eyebrow">YOUR INVENTORY</span><h2>Tracked products <span className="count">{items.length}</span></h2></div></div>}
     {items.length === 0 ? <div className="empty"><span className="empty-icon">◇</span><h3>Your watchlist is ready</h3><p>Add your first product above to monitor inventory and prices.</p></div> :
       <div className="table-wrap"><table><thead><tr><th>Product</th><th>Retailer</th><th>Availability</th><th>Price / target</th><th>Actions</th></tr></thead>
-        <tbody>{items.map(item => <tr key={item.id}>
+        <tbody>{items.map(item => <tr key={item.id} id={`product-item-${item.id}`} tabIndex={-1}>
           <td><strong>{item.model || item.sku || 'Product'}</strong><small>{item.brand || '—'}{item.sku ? ` · ${item.sku}` : ''}</small></td>
           <td className="retailer">{item.retailer === 'bestbuy' ? 'Best Buy' : item.retailer}</td>
           <td><div className="product-tags"><span className={`badge${item.in_stock === true ? ' success' : item.in_stock === false ? ' unavailable' : ''}`}>{item.in_stock == null ? 'Stock unknown' : item.in_stock ? 'In Stock' : 'Out of Stock'}</span>

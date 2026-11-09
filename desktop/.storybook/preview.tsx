@@ -8,6 +8,8 @@ const preview: Preview = {
     installDesktopApiStub();
   },
   parameters: {
+    layout: 'padded',
+    options: { storySort: { order: ['Foundations', 'Components', ['Overview', 'Actions', 'Forms', 'Display', 'Feedback', 'Navigation', 'Data'], 'Patterns', 'Application', 'Monitoring', 'Preferences', 'Legacy'] } },
     controls: {
       matchers: {
        color: /(background|color)$/i,

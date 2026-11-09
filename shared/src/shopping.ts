@@ -94,7 +94,7 @@ export function visibleShoppingOffers(offers: ShoppingOffer[], view: OfferView) 
   });
 }
 
-export function groupShoppingOffers(offers: ShoppingOffer[]) {
+export function groupShoppingOffers(offers: ShoppingOffer[], sort: OfferSort = 'source') {
   const groups = new Map<string, { vendor: string; offers: ShoppingOffer[] }>();
   for (const offer of offers) {
     const name = offer.seller.trim().replace(/\s+/g, ' ') || 'Seller not identified';
@@ -107,7 +107,16 @@ export function groupShoppingOffers(offers: ShoppingOffer[]) {
     if (group) group.offers.push(offer);
     else groups.set(key, { vendor, offers: [offer] });
   }
-  return Array.from(groups.values());
+  const result = Array.from(groups.values()).map(group => {
+    const prices = group.offers.map(shoppingListedPrice).filter((price): price is number => price != null);
+    return { ...group, lowestPrice: prices.length ? Math.min(...prices) : null };
+  });
+  if (sort === 'source') return result;
+  return result.sort((a, b) => {
+    if (a.lowestPrice == null) return b.lowestPrice == null ? 0 : 1;
+    if (b.lowestPrice == null) return -1;
+    return a.lowestPrice - b.lowestPrice;
+  });
 }
 
 export function shoppingProductStatus(result: ShoppingSearch | null) {

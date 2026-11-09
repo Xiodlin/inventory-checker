@@ -1,0 +1,244 @@
+/*
+ * Inventory Checker design foundation.
+ * Dark-first, compact, device-local monitoring UI.
+ * Components consume semantic aliases; palette scales are for theme authors.
+ * Fonts are local fallbacks: no font service or network request is required.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Brand roles: primary = actions, secondary = supporting UI, accent = offers. */
+  --primary-50: #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  --primary-900: #1e3a8a;
+  --primary-950: #172554;
+
+  --secondary-50: #f0fdfa;
+  --secondary-100: #ccfbf1;
+  --secondary-200: #99f6e4;
+  --secondary-300: #5eead4;
+  --secondary-400: #2dd4bf;
+  --secondary-500: #14b8a6;
+  --secondary-600: #0d9488;
+  --secondary-700: #0f766e;
+  --secondary-800: #115e59;
+  --secondary-900: #134e4a;
+  --secondary-950: #042f2e;
+
+  --accent-50: #fffbeb;
+  --accent-100: #fef3c7;
+  --accent-200: #fde68a;
+  --accent-300: #fcd34d;
+  --accent-400: #fbbf24;
+  --accent-500: #f59e0b;
+  --accent-600: #d97706;
+  --accent-700: #b45309;
+  --accent-800: #92400e;
+  --accent-900: #78350f;
+  --accent-950: #451a03;
+
+  --neutral-50: #f8fafc;
+  --neutral-100: #f1f5f9;
+  --neutral-200: #e2e8f0;
+  --neutral-300: #cbd5e1;
+  --neutral-400: #94a3b8;
+  --neutral-500: #64748b;
+  --neutral-600: #475569;
+  --neutral-700: #334155;
+  --neutral-800: #1e293b;
+  --neutral-900: #0f172a;
+  --neutral-950: #020617;
+
+  /* Surfaces: canvas -> surface -> raised. Inset is for inputs/code. */
+  --bg-canvas: var(--neutral-950);
+  --bg-surface: var(--neutral-900);
+  --bg-surface-raised: var(--neutral-800);
+  --bg-inset: var(--neutral-950);
+  --bg-hover: var(--neutral-800);
+  --bg-selected: var(--primary-950);
+  --bg-disabled: var(--neutral-800);
+  --bg-overlay: rgb(2 6 23 / 76%);
+  --text-primary: var(--neutral-50);
+  --text-secondary: var(--neutral-300);
+  --text-muted: var(--neutral-400);
+  --text-disabled: var(--neutral-400);
+  --text-link: var(--primary-300);
+  --text-link-hover: var(--primary-200);
+  --text-selected: var(--primary-200);
+  --border-subtle: var(--neutral-800);
+  --border-default: var(--neutral-700);
+  --border-control: var(--neutral-500);
+  --border-hover: var(--neutral-400);
+
+  /* Action text/surface pairs are designed for normal-sized UI text. */
+  --action-primary-bg: var(--primary-600);
+  --action-primary-hover: var(--primary-700);
+  --action-primary-active: var(--primary-800);
+  --action-primary-text: var(--neutral-50);
+  --action-secondary-bg: var(--secondary-950);
+  --action-secondary-hover: var(--secondary-900);
+  --action-secondary-text: var(--secondary-200);
+  --action-danger-bg: #9f1239;
+  --action-danger-hover: #881337;
+  --action-danger-text: #fff1f2;
+
+  /* Functional roles: always pair color with an explicit label or icon. */
+  --status-success-bg: #052e16;
+  --status-success-text: #86efac;
+  --status-success-border: #16a34a;
+  --status-warning-bg: var(--accent-950);
+  --status-warning-text: var(--accent-200);
+  --status-warning-border: var(--accent-600);
+  --status-error-bg: #4c0519;
+  --status-error-text: #fda4af;
+  --status-error-border: #f43f5e;
+  --status-info-bg: var(--primary-950);
+  --status-info-text: var(--primary-200);
+  --status-info-border: var(--primary-500);
+  --status-unknown-bg: var(--neutral-800);
+  --status-unknown-text: var(--neutral-300);
+  --status-unknown-border: var(--neutral-500);
+  --status-sale-bg: var(--accent-950);
+  --status-sale-text: var(--accent-200);
+  --status-sale-border: var(--accent-600);
+
+  /* Typography: 1.25 Major Third; base = 1rem (browser default 16px).
+   * xs/sm are two steps below base; 5xl is five steps above.
+   * Do not change the root font size; user font preferences remain effective.
+   */
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-code: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-size-xs: 0.64rem;
+  --font-size-sm: 0.8rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5625rem;
+  --font-size-2xl: 1.953125rem;
+  --font-size-3xl: 2.44140625rem;
+  --font-size-4xl: 3.0517578125rem;
+  --font-size-5xl: 3.814697265625rem;
+  --line-height-xs: 1.6;
+  --line-height-sm: 1.5;
+  --line-height-base: 1.5;
+  --line-height-lg: 1.4;
+  --line-height-xl: 1.3;
+  --line-height-2xl: 1.25;
+  --line-height-3xl: 1.2;
+  --line-height-4xl: 1.15;
+  --line-height-5xl: 1.1;
+  --letter-spacing-xs: 0.025em;
+  --letter-spacing-sm: 0.01em;
+  --letter-spacing-base: 0em;
+  --letter-spacing-lg: -0.01em;
+  --letter-spacing-xl: -0.015em;
+  --letter-spacing-2xl: -0.02em;
+  --letter-spacing-3xl: -0.025em;
+  --letter-spacing-4xl: -0.03em;
+  --letter-spacing-5xl: -0.035em;
+  --font-numerals: tabular-nums;
+
+  /* 4px spacing grid at the default font size; integer increments 0..24. */
+  --space-0: 0rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 1.75rem;
+  --space-8: 2rem;
+  --space-9: 2.25rem;
+  --space-10: 2.5rem;
+  --space-11: 2.75rem;
+  --space-12: 3rem;
+  --space-13: 3.25rem;
+  --space-14: 3.5rem;
+  --space-15: 3.75rem;
+  --space-16: 4rem;
+  --space-17: 4.25rem;
+  --space-18: 4.5rem;
+  --space-19: 4.75rem;
+  --space-20: 5rem;
+  --space-21: 5.25rem;
+  --space-22: 5.5rem;
+  --space-23: 5.75rem;
+  --space-24: 6rem;
+
+  --gap-inline: var(--space-2);
+  --gap-stack-tight: var(--space-2);
+  --gap-stack: var(--space-3);
+  --gap-stack-loose: var(--space-6);
+  --gap-section: var(--space-8);
+  --padding-component: var(--space-4);
+  --padding-component-compact: var(--space-3);
+  --padding-section: var(--space-6);
+  --padding-page: clamp(var(--space-4), 3vw, var(--space-10));
+  --padding-input-block: var(--space-2);
+  --padding-input-inline: var(--space-3);
+  --size-control-min: var(--space-11);
+  --size-icon-sm: var(--space-4);
+  --size-icon-md: var(--space-5);
+  --size-icon-lg: var(--space-6);
+  --size-content-max: 90rem;
+  --size-reading-max: 65ch;
+  --size-card-max: 36rem;
+  --border-width: 1px;
+  --focus-width: 2px;
+  --focus-offset: 3px;
+  --focus-color: var(--primary-300);
+
+  /* sm = badges; md = controls; lg = cards/dialogs; full = pills/avatars. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-full: 9999px;
+  --radius-control: var(--radius-md);
+  --radius-card: var(--radius-lg);
+  --radius-dialog: var(--radius-lg);
+  --radius-badge: var(--radius-sm);
+
+  /* Elevation is reinforced by a border; dark surfaces must not rely on shadow alone.
+   * sm = controls, md = raised cards, lg = popovers, xl = menus, 2xl = dialogs.
+   * Ordinary watchlist cards remain flat; nested content uses borders, not shadows.
+   */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 24%);
+  --shadow-md: 0 4px 8px -2px rgb(0 0 0 / 28%), 0 2px 4px -2px rgb(0 0 0 / 20%);
+  --shadow-lg: 0 10px 20px -4px rgb(0 0 0 / 32%), 0 4px 8px -4px rgb(0 0 0 / 24%);
+  --shadow-xl: 0 20px 32px -8px rgb(0 0 0 / 36%), 0 8px 12px -6px rgb(0 0 0 / 24%);
+  --shadow-2xl: 0 28px 56px -12px rgb(0 0 0 / 48%);
+  --elevation-card: none;
+  --elevation-popover: var(--shadow-lg);
+  --elevation-dialog: var(--shadow-2xl);
+  --layer-base: 0;
+  --layer-sticky: 10;
+  --layer-popover: 20;
+  --layer-dialog: 30;
+  --layer-toast: 40;
+
+  /* Fast = hover/focus; normal = disclosure; slow = major view change. */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
+}

@@ -1,5 +1,6 @@
 import type { Item, NewItem, LocalNotification, LocalSettings, PricePoint, MonitorStatus, CheckResult, ShoppingWatch } from '@inventory-checker/core';
 import type { ShoppingInput, ShoppingSearch } from '../main/shoppingTypes';
+import type { NotificationTarget } from '@inventory-checker/core';
 export type { ShoppingInput, ShoppingSearch, ShoppingOffer } from '../main/shoppingTypes';
 export type { ShoppingWatch } from '@inventory-checker/core';
 export type { Item, NewItem, PricePoint };
@@ -13,6 +14,9 @@ export interface DesktopApi {
   addItem(item: NewItem): Promise<Item>;
   deleteItem(id: string): Promise<void>;
   notifications(): Promise<LocalNotification[]>;
+  clearNotifications(): Promise<void>;
+  deleteNotification(id: string): Promise<void>;
+  onNotificationOpen(callback: (target: NotificationTarget | null) => void): () => void;
   markRead(id: string): Promise<void>;
   settings(): Promise<LocalSettings>;
   saveSettings(value: LocalSettings): Promise<LocalSettings>;

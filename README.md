@@ -63,7 +63,72 @@ device unlock for background work. Grant notification permission when prompted;
 Settings allows requesting it again. If denied, alerts remain in the app and
 delivery failures are shown explicitly.
 
+## Storybook component suite
+
+```bash
+npm run storybook --workspace desktop        # interactive catalog on port 6006
+npm run test:storybook --workspace desktop   # headless Chromium interactions
+npm run build-storybook --workspace desktop # static catalog in desktop/storybook-static
+```
+
+The desktop catalog includes:
+
+- **Foundations:** role-based color scales, semantic surfaces and functional
+  states, typography, spacing/sizing, elevation/radius/motion, a token-based
+  product card, and token integrity checks.
+- **Components → Overview → All Components:** a single-page visual inventory of
+  all 22 token-based library components. Each component also has its own sidebar
+  entry, generated prop documentation/controls, and isolated state stories:
+  - **Actions:** Button and Icon Button; variants, sizes, hover/pressed/focus,
+    disabled/loading states, and accessible names.
+  - **Forms:** Input, Textarea, Select, Checkbox, Radio Group, Switch, Field Label,
+    and Help Text; empty/filled, required, disabled/read-only, error, checked/mixed,
+    selection, keyboard focus, and associated descriptions where applicable.
+  - **Display:** Card, Badge, Disclosure, Empty State, and Divider.
+  - **Feedback:** Alert, Dialog, Spinner, and Skeleton.
+  - **Navigation:** Tabs and Link. **Data:** Table.
+  Hover/pressed snapshots use explicit preview attributes sharing native
+  pseudo-state CSS. Components are exported from
+  `desktop/src/renderer/components/Button.tsx` and `UI.tsx`; existing production
+  components are not automatically migrated to them.
+- **Patterns → Common UI:** composed form validation/recovery, selection controls,
+  feedback, product cards, confirmation flows, navigation, and loading examples.
+- **Application:** unified dashboard, empty/error states, manual-check feedback,
+  individual dismissal, confirmed clearing, direct/search product navigation,
+  legacy/missing-product fallbacks, and simulated OS-banner navigation.
+- **Monitoring:** compact generalized add flow, pending/unknown/out-of-stock/sale
+  tags, lowest prices, retained observations, independent per-product filters,
+  vendor grouping and two-level price sorting, verification evidence, uncertain
+  matches, link selection, notification read/dismiss/clear actions and errors.
+- **Preferences:** compact settings, notification test/failure, backup actions,
+  saving and failure recovery. **Legacy** retains direct-retailer components.
+
+Every story gets an isolated in-memory Electron bridge stub; interactive
+application stories persist mutations within that story and never fetch live
+Google/retailer data or invoke OS dialogs. The a11y addon reports findings but
+remains advisory (`todo`), not a claim that the entire existing UI passes WCAG.
+These are desktop browser stories, not native mobile or real OS-banner tests.
+The token previews do not migrate the production UI to the new design tokens.
+
 ## Checks, sleep, and notifications
+
+Each saved alert has a **Dismiss** action that deletes only that alert.
+Click/tap the alert title or body to open the dashboard, expand and highlight its
+linked product card, and mark the alert read. Desktop and mobile OS-banner clicks
+also open the linked dashboard card (mobile handles both running and cold launches).
+New direct-retailer and saved-search alerts store stable product IDs, not inferred
+title matches. Older alerts without a link open the dashboard with an explanation;
+removed products are reported explicitly. Direct-product links survive backups;
+saved-search alerts may refer to a missing search after transfer because searches
+are not backed up. Dismissal does not reset monitoring or stock-change deduplication.
+
+Use **Notifications → Clear notifications** (inside the collapsible notifications
+section on mobile), then **Delete all notifications** to confirm. This permanently
+deletes all saved alerts on this device, including read/unread alerts and pending
+delivery retries, not just the latest displayed entries. Cancel leaves them intact.
+Monitoring, stock-change deduplication, products, and price history are unchanged;
+future qualifying changes still create alerts. Already displayed OS notifications
+are not dismissed, and an alert already being delivered may still appear.
 
 - Default product interval: **15 minutes**, configurable from 5 to 10,080 minutes.
 - Desktop and foreground mobile look for due products every minute. New general
@@ -245,7 +310,8 @@ seller names (ignoring case/extra spaces) share a group; Apple Education Store
 and Apple share **Apple** while each listing keeps its original seller label.
 Grouping uses displayed seller names, not proof of site identity. Filters apply
 before grouping; the selected price order controls listings within a vendor and
-vendor order by the first listing in that order. Desktop keeps uncertain matches
+vendor order by each vendor's lowest listed price, lowest vendor first for either
+price direction. Original order preserves source ordering. Desktop keeps uncertain matches
 in their separate section. All listings remain accessible; none are deduplicated.
 
 Evidence labels are not legitimacy ratings or safety guarantees. A verified

@@ -72,7 +72,7 @@ export function localRuntime() {
         }
         await Notifications.scheduleNotificationAsync({
           identifier: notification.id,
-          content: { title: notification.title, body: notification.body, data: { notificationId: notification.id } },
+          content: { title: notification.title, body: notification.body, data: { notificationId: notification.id, target: notification.target ?? null } },
           trigger: Platform.OS === 'android' ? { channelId: 'inventory' } : null,
         });
       }, changed, (item, key) => checkInventory(item, key, fetch));

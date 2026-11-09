@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Notification, safeStorage } from 'electron';
-import { LocalMonitor, LocalStore, ShoppingMonitor, verifyShoppingOffers } from '@inventory-checker/core';
+import { LocalMonitor, LocalStore, ShoppingMonitor, verifyShoppingOffers, type NotificationTarget } from '@inventory-checker/core';
 import { DesktopDatabase } from './database';
 import { ShoppingService } from './shoppingService';
 
@@ -16,7 +16,7 @@ export class DesktopService {
   private readonly keyPath: string;
   private readonly activeNotifications = new Set<Notification>();
   private checkGeneration = 0;
-  constructor(directory: string, changed: () => void, openWindow: () => void) {
+  constructor(directory: string, changed: () => void, openWindow: (target?: NotificationTarget | null) => void) {
     this.database = new DesktopDatabase(join(directory, 'inventory.sqlite'));
     this.store = new LocalStore(this.database, randomUUID);
     this.shopping = new ShoppingService(this.database);
@@ -26,7 +26,7 @@ export class DesktopService {
     }, changed);
     this.keyPath = join(directory, 'bestbuy-key.bin');
     this.monitor = new LocalMonitor(this.store, randomUUID(), () => this.getKey(),
-      alert => this.showNotification(alert.title, alert.body, alert.id, openWindow), changed);
+      alert => this.showNotification(alert.title, alert.body, alert.id, () => openWindow(alert.target)), changed);
   }
   private async showNotification(title: string, body: string, id: string, openWindow?: () => void) {
     if (!Notification.isSupported()) throw new Error('Desktop notifications are unavailable on this device');

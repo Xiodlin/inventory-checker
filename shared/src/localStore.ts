@@ -3,7 +3,7 @@ import { notificationReason } from './alerts';
 import { itemInput, parseBackup, pickupStoreSchema, serializeBackup } from './backup';
 import { identifier, localSettings, newItem } from './validation';
 import type { InventoryResult } from './scrapers/baseScraper';
-import type { Item, LocalNotification, LocalSettings, MonitorStatus, PickupStore, PricePoint } from './types';
+import { notificationTarget, type Item, type LocalNotification, type LocalSettings, type MonitorStatus, type PickupStore, type PricePoint } from './types';
 
 export type SqlValue = string | number | null;
 export interface SqlConnection {
@@ -39,8 +39,12 @@ export class LocalStore {
     await this.db.exec('PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;');
     await this.db.transaction(async tx => {
       const versions = await tx.all<{ user_version: number }>('PRAGMA user_version');
-      if (versions[0].user_version > 1) throw new Error('Local database requires a newer app version');
-      if (versions[0].user_version === 1) return;
+      if (versions[0].user_version > 2) throw new Error('Local database requires a newer app version');
+      if (versions[0].user_version === 2) return;
+      if (versions[0].user_version === 1) {
+        await tx.exec('ALTER TABLE notifications ADD COLUMN target TEXT; PRAGMA user_version=2;');
+        return;
+      }
       await tx.exec(`
         CREATE TABLE items (
           id TEXT PRIMARY KEY, user_id TEXT NOT NULL DEFAULT 'local',
@@ -59,13 +63,13 @@ export class LocalStore {
         CREATE TABLE notifications (
           id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT NOT NULL,
           read INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL,
-          delivered INTEGER NOT NULL DEFAULT 0, delivery_error TEXT
+          delivered INTEGER NOT NULL DEFAULT 0, delivery_error TEXT, target TEXT
         );
         CREATE TABLE settings (id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL);
         CREATE TABLE monitor (id INTEGER PRIMARY KEY CHECK(id=1), owner TEXT, lease_until INTEGER NOT NULL DEFAULT 0,
           last_run_at TEXT, error TEXT);
         INSERT INTO monitor(id) VALUES(1);
-        PRAGMA user_version=1;
+        PRAGMA user_version=2;
       `);
       await tx.run('INSERT INTO settings(id,value) VALUES(1,?)', [JSON.stringify(defaults)]);
     });
@@ -119,15 +123,22 @@ export class LocalStore {
     return this.readNotifications(this.db, pending);
   }
   private async readNotifications(tx: SqlConnection, pending = false): Promise<LocalNotification[]> {
-    const rows = await tx.all<Omit<LocalNotification, 'read'> & { read: number }>(
-      `SELECT id,title,body,read,created_at,delivery_error FROM notifications ${pending ? 'WHERE delivered=0 AND read=0' : ''}
+    const rows = await tx.all<Omit<LocalNotification, 'read' | 'target'> & { read: number; target: string | null }>(
+      `SELECT id,title,body,read,created_at,delivery_error,target FROM notifications ${pending ? 'WHERE delivered=0 AND read=0' : ''}
       ORDER BY created_at DESC,id DESC LIMIT 1000`);
-    return rows.map(row => ({ ...row, read: row.read === 1 }));
+    return rows.map(row => ({ ...row, read: row.read === 1, target: row.target ? notificationTarget(JSON.parse(row.target)) : null }));
   }
   async markRead(id: string) {
     identifier.parse(id);
     if (!(await this.db.all('SELECT id FROM notifications WHERE id=?', [id])).length) throw new Error('Notification not found');
     await this.db.run('UPDATE notifications SET read=1 WHERE id=?', [id]);
+  }
+  async clearNotifications() {
+    await this.db.run('DELETE FROM notifications');
+  }
+  async deleteNotification(id: string) {
+    identifier.parse(id);
+    await this.db.run('DELETE FROM notifications WHERE id=?', [id]);
   }
   async delivery(id: string, error: string | null) {
     await this.db.run('UPDATE notifications SET delivered=?,delivery_error=? WHERE id=?', [error === null ? 1 : 0, error, id]);
@@ -155,8 +166,8 @@ export class LocalStore {
       const reason = notificationReason(current, result);
       if (reason && (await this.readSettings(tx)).notifications_enabled) {
         const title = [current.brand, current.model ?? current.sku ?? current.retailer].filter(Boolean).join(' ').slice(0, 120);
-        await tx.run('INSERT INTO notifications(id,title,body,created_at) VALUES(?,?,?,?)',
-          [this.uuid(), title, reason.slice(0, 1000), time]);
+        await tx.run('INSERT INTO notifications(id,title,body,created_at,target) VALUES(?,?,?,?,?)',
+          [this.uuid(), title, reason.slice(0, 1000), time, JSON.stringify({ kind: 'item', id })]);
       }
     });
   }
@@ -194,7 +205,7 @@ export class LocalStore {
           })),
         });
       }
-      const notifications = (await this.readNotifications(tx)).map(({ id, title, body, read, created_at }) => ({ id, title, body, read, created_at }));
+      const notifications = (await this.readNotifications(tx)).map(({ id, title, body, read, created_at, target }) => ({ id, title, body, read, created_at, target }));
       return serializeBackup({ version: 1, items, notifications });
     });
   }
@@ -222,8 +233,8 @@ export class LocalStore {
         }
       }
       for (const alert of backup.notifications) {
-        await tx.run('INSERT INTO notifications(id,title,body,read,created_at,delivered) VALUES(?,?,?,?,?,1) ON CONFLICT(id) DO NOTHING',
-          [alert.id, alert.title, alert.body, Number(alert.read), alert.created_at]);
+        await tx.run('INSERT INTO notifications(id,title,body,read,created_at,target,delivered) VALUES(?,?,?,?,?,?,1) ON CONFLICT(id) DO NOTHING',
+          [alert.id, alert.title, alert.body, Number(alert.read), alert.created_at, alert.target ? JSON.stringify(alert.target) : null]);
       }
     });
   }

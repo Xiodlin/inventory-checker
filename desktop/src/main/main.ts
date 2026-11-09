@@ -75,7 +75,12 @@ else {
       contents.session.setPermissionCheckHandler(() => false);
     });
     await mkdir(app.getPath('userData'), { recursive: true });
-    service = new DesktopService(app.getPath('userData'), () => window?.webContents.send('inventory:changed'), restore);
+    service = new DesktopService(app.getPath('userData'), () => window?.webContents.send('inventory:changed'), target => {
+      restore();
+      const contents = window?.webContents;
+      if (contents?.isLoadingMainFrame()) contents.once('did-finish-load', () => contents.send('inventory:notification-open', target ?? null));
+      else contents?.send('inventory:notification-open', target ?? null);
+    });
     await service.store.initialize();
     registerIpcHandlers(() => window, rendererUrl, service);
     createWindow();

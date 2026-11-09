@@ -51,7 +51,8 @@ export const ApplePickupFields: Story = {
 export const CssCheck: Story = {
   play: async ({ canvas }) => {
     const button = canvas.getByRole('button', { name: /add product/i });
-    // .primary buttons use background #4289ed — fails if app.css did not load.
-    await expect(getComputedStyle(button).backgroundColor).toBe('rgb(66, 137, 237)');
+    await expect(button).toHaveClass('ui-button--primary');
+    await expect(getComputedStyle(button).backgroundColor).toBe('rgb(37, 99, 235)');
+    await expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
   },
 };

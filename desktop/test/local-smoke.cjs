@@ -41,6 +41,32 @@ app.whenReady().then(async () => {
     assert.equal(output.local, true);
     assert.equal(output.login, false);
     assert.equal(output.node, 'undefined');
+    const designSystem = await window.webContents.executeJavaScript(`(() => {
+      const workspace = document.querySelector('.workspace');
+      const button = [...workspace.querySelectorAll('button')].find(button => button.textContent === 'Check now');
+      const panel = workspace.querySelector('.panel');
+      workspace.style.setProperty('--action-primary-bg', 'rgb(100, 40, 120)');
+      workspace.style.setProperty('--bg-surface', 'rgb(20, 30, 40)');
+      button.style.transition = 'none';
+      try {
+        return {
+          sharedButtons: [...workspace.querySelectorAll('button')].every(button => button.classList.contains('ui-button')),
+          minTarget: button.getBoundingClientRect().height >= 44,
+          buttonColor: getComputedStyle(button).backgroundColor,
+          panelColor: getComputedStyle(panel).backgroundColor,
+          currentPage: workspace.querySelector('nav [aria-current="page"]').textContent,
+        };
+      } finally {
+        workspace.style.removeProperty('--action-primary-bg');
+        workspace.style.removeProperty('--bg-surface');
+        button.style.removeProperty('transition');
+      }
+    })()`);
+    assert.equal(designSystem.sharedButtons, true);
+    assert.equal(designSystem.minTarget, true);
+    assert.equal(designSystem.buttonColor, 'rgb(100, 40, 120)');
+    assert.equal(designSystem.panelColor, 'rgb(20, 30, 40)');
+    assert.match(designSystem.currentPage, /Dashboard/);
     assert.equal(output.first.failed, 1);
     assert.equal(output.second.checked, 1, 'manual checking must retry a recently failed product');
     const manualFeedback = await window.webContents.executeJavaScript(`(async () => {

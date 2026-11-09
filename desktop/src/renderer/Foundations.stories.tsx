@@ -12,7 +12,7 @@ const meta = {
   component: Foundation,
   tags: ['autodocs'],
   args: { children: null },
-  parameters: { docs: { description: { component: 'Inventory Checker token reference. These previews consume the standalone token foundation; they do not imply that the production stylesheet has been migrated. Fonts use local fallbacks. No external resources are fetched.' } } },
+  parameters: { docs: { description: { component: 'Inventory Checker token reference. The desktop application and component catalog share these semantic tokens for surfaces, controls, typography, spacing, focus and motion. Fonts use local fallbacks. No external resources are fetched.' } } },
 } satisfies Meta<typeof Foundation>;
 export default meta;
 type Story = StoryObj<typeof meta>;

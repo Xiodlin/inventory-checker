@@ -66,7 +66,7 @@ function ComponentInventory() {
 }
 const meta = {
   title: 'Components/Overview', component: ComponentInventory, tags: ['autodocs'],
-  parameters: { layout: 'fullscreen', docs: { description: { component: 'An at-a-glance inventory of all 22 token-based UI components. Open an individual component entry for states, controls, and usage. These library components do not automatically replace existing production controls.' } } },
+  parameters: { layout: 'fullscreen', docs: { description: { component: 'An at-a-glance inventory of all 22 token-based UI components. Open an individual component entry for states, controls, and usage. The desktop application uses the shared foundation and relevant components; remaining elements are available for future features.' } } },
 } satisfies Meta<typeof ComponentInventory>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -8,7 +8,7 @@ const meta = {
   tags: ['autodocs'],
   args: { children: 'Save preferences', onClick: fn(), variant: 'primary', size: 'md', loading: false, disabled: false },
   decorators: [Story => <div className="ui-kit"><Story /></div>],
-  parameters: { docs: { description: { component: 'Token-based button primitive. Native button semantics; defaults to type="button". Loading blocks duplicate activation and exposes aria-busy; disabled does not show a loading cursor. These primitives are available for adoption and do not replace production controls automatically.' } } },
+  parameters: { docs: { description: { component: 'Shared production button used across dashboard navigation/actions, notifications, settings, and direct-retailer views. Native semantics; defaults to type="button". Loading blocks duplicate activation and exposes aria-busy; disabled does not show a loading cursor.' } } },
 } satisfies Meta<typeof Button>;
 export default meta;
 type Story = StoryObj<typeof meta>;

@@ -7,6 +7,8 @@ import Settings from './components/Settings';
 import ShoppingDiscovery from './components/ShoppingDiscovery';
 import type { InventoryNotification, Item, SettingsData, ShoppingWatch } from './types';
 import appIcon from '../../public/assets/icon.png';
+import { Button } from './components/Button';
+import { Alert, Badge, Card, Spinner } from './components/UI';
 
 type Page = 'dashboard' | 'notifications' | 'settings';
 export default function App() {
@@ -43,7 +45,7 @@ export default function App() {
     const details = card.querySelector<HTMLDetailsElement>('.watch-details');
     if (details) details.open = true;
     card.classList.add('notification-target');
-    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    card.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     card.focus({ preventScroll: true });
     return () => card.classList.remove('notification-target');
   }, [focus, page, items, watches]);
@@ -89,25 +91,25 @@ export default function App() {
   const unread = notifications.filter(value => !value.read).length;
   return <div className="workspace">
     <aside className="sidebar"><div className="brand"><img className="logo" src={appIcon} alt="" /><span>Inventory<br />Checker</span></div>
-      <span className="eyebrow nav-caption">ON THIS DEVICE</span><nav>
-        <button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>▦ Dashboard</button>
-        <button className={page === 'notifications' ? 'active' : ''} onClick={() => setPage('notifications')}>♧ Notifications {unread > 0 && <span className="nav-count">{unread}</span>}</button>
-        <button className={page === 'settings' ? 'active' : ''} onClick={() => setPage('settings')}>⚙ Settings</button>
+      <span className="eyebrow nav-caption">ON THIS DEVICE</span><nav aria-label="Main navigation">
+        <Button variant="ghost" aria-current={page === 'dashboard' ? 'page' : undefined} onClick={() => setPage('dashboard')}>▦ Dashboard</Button>
+        <Button variant="ghost" aria-current={page === 'notifications' ? 'page' : undefined} onClick={() => setPage('notifications')}>♧ Notifications {unread > 0 && <Badge className="nav-count" tone="info">{unread}</Badge>}</Button>
+        <Button variant="ghost" aria-current={page === 'settings' ? 'page' : undefined} onClick={() => setPage('settings')}>⚙ Settings</Button>
       </nav><div className="sidebar-bottom"><p>Local SQLite storage</p><small>No account or server required</small>
         <small>Last run: {lastRun ? new Date(lastRun).toLocaleString() : 'Not yet'}</small>
       </div></aside>
-    <main className="main-content"><header><div><span className="eyebrow">INVENTORY CHECKER</span>
+    <main className="main-content"><header className="page-heading"><div><span className="eyebrow">INVENTORY CHECKER</span>
       <h1>{page === 'dashboard' ? 'Your watchlist' : page === 'notifications' ? 'Stay in the loop' : 'Settings'}</h1>
       <p className="muted">Your data stays on this device. Retailer checks still require internet.</p></div>
-      <button disabled={loading || checking} onClick={() => void check()}>{checking ? 'Checking…' : 'Check now'}</button></header>
-      {checkMessage && <p role="status" className="muted">{checkMessage}</p>}
-      {error && <p role="alert" className="error">{error}</p>}
-      {navigationMessage && <p role="status" className="muted">{navigationMessage}</p>}
-      {monitorError && <p role="alert" className="error">{monitorError}</p>}
-      {loading && <p role="status" className="loading">Opening local storage…</p>}
-      {page === 'dashboard' && <><div className="stats"><article><span>TRACKED PRODUCTS</span><strong>{items.length + watches.length}</strong></article>
-        <article><span>LAST REPORTED IN STOCK</span><strong>{items.filter(item => item.in_stock).length + watches.filter(watch => watch.result?.offers.some(offer => offer.match === 'text-match' && offer.availability === 'reported-in-stock')).length}</strong></article>
-        <article><span>UNREAD ALERTS</span><strong>{unread}</strong></article></div>
+      <Button disabled={loading} loading={checking} onClick={() => void check()}>{checking ? 'Checking…' : 'Check now'}</Button></header>
+      {checkMessage && <Alert role="status" tone="info" title={checkMessage} />}
+      {error && <Alert role="alert" tone="error" title={error} />}
+      {navigationMessage && <Alert role="status" title={navigationMessage} />}
+      {monitorError && <Alert role="alert" tone="error" title={monitorError} />}
+      {loading && <Spinner label="Opening local storage…" />}
+      {page === 'dashboard' && <><div className="stats"><Card title="TRACKED PRODUCTS"><strong>{items.length + watches.length}</strong></Card>
+        <Card title="LAST REPORTED IN STOCK"><strong>{items.filter(item => item.in_stock).length + watches.filter(watch => watch.result?.offers.some(offer => offer.match === 'text-match' && offer.availability === 'reported-in-stock')).length}</strong></Card>
+        <Card title="UNREAD ALERTS"><strong>{unread}</strong></Card></div>
         <ShoppingDiscovery focus={focus?.target.kind === 'shopping' ? { id: focus.target.id, request: focus.request } : null}
           existingCount={items.length} existingProducts={items.length ? <Dashboard embedded items={items} onDelete={remove} /> : undefined} /></>}
       {page === 'notifications' && <NotificationPanel notifications={notifications} onRead={read} onClear={clearNotifications}

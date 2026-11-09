@@ -89,8 +89,9 @@ The desktop catalog includes:
   - **Navigation:** Tabs and Link. **Data:** Table.
   Hover/pressed snapshots use explicit preview attributes sharing native
   pseudo-state CSS. Components are exported from
-  `desktop/src/renderer/components/Button.tsx` and `UI.tsx`; existing production
-  components are not automatically migrated to them.
+  `desktop/src/renderer/components/Button.tsx` and `UI.tsx`. The desktop application
+  uses these same controls and semantic tokens across the dashboard, watchlist,
+  notifications, settings, and legacy direct-retailer views.
 - **Patterns → Common UI:** composed form validation/recovery, selection controls,
   feedback, product cards, confirmation flows, navigation, and loading examples.
 - **Application:** unified dashboard, empty/error states, manual-check feedback,
@@ -108,7 +109,14 @@ application stories persist mutations within that story and never fetch live
 Google/retailer data or invoke OS dialogs. The a11y addon reports findings but
 remains advisory (`todo`), not a claim that the entire existing UI passes WCAG.
 These are desktop browser stories, not native mobile or real OS-banner tests.
-The token previews do not migrate the production UI to the new design tokens.
+The desktop application imports the token foundation through `app.css`. Application
+styles use semantic color, type, spacing, radius, focus, and motion tokens instead
+of a parallel hardcoded theme. Shared controls retain native form submission,
+validation, and keyboard behavior. Cards remain flat, notification links retain
+product focus/highlighting, and reduced-motion preferences disable animated
+scrolling and spinners. Navigation stacks above content on narrow windows; wide
+product tables scroll within their own focusable region. This migration is for the
+Electron desktop renderer; native mobile styling is unchanged.
 
 ## Checks, sleep, and notifications
 
@@ -400,6 +408,36 @@ npm test                   # SQLite/core + legacy retailer/API tests
 npm test --workspace desktop # Actual Electron SQLite/IPC smoke test, after build
 npm run package --workspace desktop
 ```
+
+### Desktop installers
+
+```sh
+npm run package:mac --workspace desktop # macOS: separate Apple Silicon and Intel DMGs
+npm run package:win --workspace desktop # Windows: x64 NSIS setup wizard
+```
+
+Installers are written to `desktop/release/` with platform and architecture in
+their names. Open the appropriate Mac DMG and drag Inventory Checker to
+Applications. On Windows, run the setup executable; it installs for the current
+user, offers an installation-directory choice, and creates Start menu/desktop
+shortcuts. Uninstalling keeps device-local data. Quit the tray application before
+installing an update; do not delete its data directory.
+
+The Mac command creates ad-hoc-signed builds, **not Apple-notarized distribution
+builds**. Other Macs may block them with Gatekeeper. Windows builds without a
+configured signing certificate are unsigned and may trigger SmartScreen. Do not
+disable OS protections; use organization-approved installation procedures.
+Trusted public distribution requires Apple Developer signing/notarization and
+Windows code-signing credentials supplied securely to electron-builder, never
+committed to the repository. Use the generic `package` command with your release
+signing configuration instead of the explicitly ad-hoc Mac command.
+
+Build Mac installers on macOS. Windows x64 setup also cross-builds on Apple Silicon
+using the configured native-compatible NSIS toolset. Prefer Windows for final
+installation/launch testing; other resource-editing/signing configurations may
+require Wine when cross-building.
+Creating an installer does not verify launch, notifications, or monitoring on a
+different operating system; test each installer on its target platform.
 
 The shared package builds automatically for desktop. Metro uses its portable
 TypeScript source for mobile. There is no separate lint setup.

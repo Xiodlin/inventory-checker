@@ -50,9 +50,11 @@
 @media(prefers-reduced-motion:reduce){.ui-spinner{animation:none}}
 @media(forced-colors:active){.ui-button:disabled{color:GrayText}.ui-spinner{border-color:ButtonText;border-inline-end-color:transparent}.ui-button:focus-visible{outline-color:Highlight}}
 .ui-help{margin:0;font-size:var(--font-size-sm);line-height:var(--line-height-sm)}
-.ui-kit .ui-help--muted{color:var(--text-muted)}
-.ui-kit .ui-help--error{color:var(--status-error-text)}
-.ui-kit .ui-help--success{color:var(--status-success-text)}
+.ui-help--muted,.ui-kit .ui-help--muted{color:var(--text-muted)}
+.ui-help--error,.ui-kit .ui-help--error{color:var(--status-error-text)}
+.ui-help--success,.ui-kit .ui-help--success{color:var(--status-success-text)}
+.ui-field{min-width:0}
+.ui-label-row{display:flex;flex-wrap:wrap;gap:var(--space-1);align-items:baseline}
 .ui-label{font-size:var(--font-size-sm);font-weight:var(--font-weight-semibold);color:var(--text-primary)}
 .ui-required{font-weight:var(--font-weight-regular);color:var(--text-muted)}
 .ui-choice{gap:var(--space-1)}

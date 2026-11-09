@@ -22,7 +22,9 @@ export interface FieldLabelProps {
   required?: boolean;
 }
 export function FieldLabel({ htmlFor, children, required }: FieldLabelProps) {
-  return <label className="ui-label" htmlFor={htmlFor}>{children}{required && <span className="ui-required"> (required)</span>}</label>;
+  return <div className="ui-label-row"><label className="ui-label" htmlFor={htmlFor}>{children}</label>
+    {required && <span className="ui-required" aria-hidden="true"> (required)</span>}
+  </div>;
 }
 
 interface FieldProps {

@@ -6,6 +6,8 @@ files:
   - dist/**/*
   - package.json
 asar: true
+toolsets:
+  nsis: 1.2.1
 icon: ../assets/icon.png
 extraResources:
   - from: ../assets/icon.png
@@ -13,6 +15,22 @@ extraResources:
 linux:
   target: AppImage
 win:
-  target: nsis
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Inventory-Checker-${version}-windows-${arch}-setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Inventory Checker
+  deleteAppDataOnUninstall: false
 mac:
   target: dmg
+  category: public.app-category.utilities
+  artifactName: Inventory-Checker-${version}-mac-${arch}.${ext}
+dmg:
+  title: Inventory Checker

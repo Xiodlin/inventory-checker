@@ -3,6 +3,8 @@ import { errorMessage, localApi } from '../api';
 import type { ShoppingOffer, ShoppingWatch } from '../types';
 import { shoppingProductStatus, shoppingSellerEvidence, visibleShoppingOffers, groupShoppingOffers, defaultOfferView,
   offerSortOptions, sellerFilterOptions, type OfferView, type OfferSort } from '@inventory-checker/core/src/shopping';
+import { Button } from './Button';
+import { Alert, Badge, EmptyState, Input, Select } from './UI';
 
 export default function ShoppingDiscovery({ existingProducts, existingCount = 0, focus }: {
   existingProducts?: ReactNode; existingCount?: number;
@@ -21,7 +23,7 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0,
     if (!card) return;
     const details = card.querySelector<HTMLDetailsElement>('.watch-details');
     if (details) details.open = true;
-    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    card.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     card.focus({ preventScroll: true });
   }, [focus, watches]);
   async function refresh() {
@@ -58,9 +60,9 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0,
   const renderOffer = (offer: ShoppingOffer, index: number) => <li className="discovery-card" key={`${offer.url}-${index}`}>
     <h3>{offer.title}</h3>
     <div className="discovery-offer-meta"><span>{offer.seller}</span><strong className="discovery-price">{offer.price}</strong></div>
-    <p className="seller-evidence"><span className="badge">{shoppingSellerEvidence(offer).label}</span></p>
-    <p className="discovery-availability"><span className={`badge${offer.availability === 'reported-in-stock' ? ' success' : ''}`}>{offer.availability === 'unknown' ? 'Availability unknown' : 'Google-reported availability'}</span> {offer.availability_text}</p>
-    {offer.sale_text && <p><span className="badge sale">On Sale</span> <span className="muted">{offer.sale_text} · Google-reported</span></p>}
+    <p className="seller-evidence"><Badge>{shoppingSellerEvidence(offer).label}</Badge></p>
+    <p className="discovery-availability"><Badge tone={offer.availability === 'reported-in-stock' ? 'success' : 'neutral'}>{offer.availability === 'unknown' ? 'Availability unknown' : 'Google-reported availability'}</Badge> {offer.availability_text}</p>
+    {offer.sale_text && <p><Badge tone="accent">On Sale</Badge> <span className="muted">{offer.sale_text} · Google-reported</span></p>}
     {!!offer.missing.length && <p className="muted">Not established: {offer.missing.join('; ')}</p>}
     {!!offer.details?.length && <ul className="muted">{offer.details.map((detail, index) => <li key={index}>{detail}</li>)}</ul>}
     {offer.verification && <p className={offer.verification.status === 'failed' ? 'error' : 'muted'}>
@@ -68,7 +70,7 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0,
       {offer.verification.price != null && ` Price: $${offer.verification.price.toFixed(2)}`}
     </p>}
     <details className="discovery-link"><summary>Offer link</summary>
-      <label>Copy this link into your browser<input readOnly value={offer.url} onClick={event => event.currentTarget.select()} /></label>
+      <Input label="Copy this link into your browser" readOnly value={offer.url} onClick={event => event.currentTarget.select()} />
     </details>
   </li>;
   const renderVendors = (offers: ShoppingOffer[], sort: OfferSort) => <div className="vendor-groups">
@@ -83,20 +85,20 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0,
       <div className="discovery-section-body">
         <p className="muted">Describe the product and required variant. Google receives your search and IP address. Results depend on Google's coverage; not every retailer or product is included.</p>
         <form onSubmit={event => void add(event)} className="discovery-form">
-          <label>Product / model name<input name="product" required minLength={3} maxLength={150} placeholder="MacBook Neo" disabled={busy} /></label>
-          <label>Required variant phrases (comma-separated)<input name="variants" required maxLength={800} placeholder="256GB, Indigo" disabled={busy} /></label>
-          <label>Example link (optional reference only)<input name="example_url" type="url" maxLength={2048} placeholder="https://…" disabled={busy} /></label>
+          <Input label="Product / model name" name="product" required minLength={3} maxLength={150} placeholder="MacBook Neo" disabled={busy} />
+          <Input label="Required variant phrases (comma-separated)" name="variants" required maxLength={800} placeholder="256GB, Indigo" disabled={busy} />
+          <Input label="Example link (optional reference only)" name="example_url" type="url" maxLength={2048} placeholder="https://…" disabled={busy} />
           <p className="muted discovery-help">The example link is saved, not fetched or used to infer specifications. Only required-text matches explicitly reported in stock create alerts. Availability is Google-reported, not retailer-verified.</p>
-          <div className="discovery-actions"><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Add product'}</button></div>
+          <div className="discovery-actions"><Button type="submit" loading={busy}>{busy ? 'Saving…' : 'Add product'}</Button></div>
         </form>
-        {!!message && <p role="status" className="saved">{message}</p>}
+        {!!message && <Alert role="status" tone="success" title={message} />}
       </div>
     </details>
-    {!!error && <p role="alert" className="error">{error}</p>}
+    {!!error && <Alert role="alert" tone="error" title={error} />}
     <section className="panel discovery-section" aria-labelledby="watchlist-title">
       <h2 id="watchlist-title">Tracked products<span className="count">{watches.length + existingCount}</span></h2>
-      <div className="discovery-monitor-status"><span className={`badge${automatic ? ' success' : ''}`}>{automatic ? 'Automatic search checks enabled' : 'Automatic search checks paused'}</span><span>Every {interval ?? 'configured'} minutes · While running and awake</span></div>
-      {!watches.length && !existingCount && <p className="muted">No products yet. Add a product above to start monitoring.</p>}
+      <div className="discovery-monitor-status"><Badge tone={automatic ? 'success' : 'neutral'}>{automatic ? 'Automatic search checks enabled' : 'Automatic search checks paused'}</Badge><span>Every {interval ?? 'configured'} minutes · While running and awake</span></div>
+      {!watches.length && !existingCount && <EmptyState title="No products yet">No products yet. Add a product above to start monitoring.</EmptyState>}
       <ul className="discovery-offers">{watches.map(watch => {
         const status = shoppingProductStatus(watch.result);
         const view = views[watch.id] ?? defaultOfferView;
@@ -104,29 +106,29 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0,
         return <li className={`discovery-card${focus?.id === watch.id ? ' notification-target' : ''}`} key={watch.id} id={`product-shopping-${watch.id}`} tabIndex={-1}>
         <h3>{watch.input.product} · {watch.input.variants.join(', ')}</h3>
         <div className="product-tags" aria-label="Product status">
-          <span className={`badge${status.stock === 'in-stock' ? ' success' : status.stock === 'out-of-stock' ? ' unavailable' : ''}`}>
+          <Badge tone={status.stock === 'in-stock' ? 'success' : status.stock === 'out-of-stock' ? 'error' : 'neutral'}>
             {status.stock === 'in-stock' ? 'In Stock' : status.stock === 'out-of-stock' ? 'Out of Stock' : 'Stock unknown'}
-          </span>
-          {status.sale && <span className="badge sale">On Sale</span>}
-          {status.lowestPrice != null && <span className="badge" title="Lowest Google-listed price among required-text matches in the last successful search. Includes unknown or out-of-stock offers; excludes tax and shipping.">
+          </Badge>
+          {status.sale && <Badge tone="accent">On Sale</Badge>}
+          {status.lowestPrice != null && <Badge tone="info" title="Lowest Google-listed price among required-text matches in the last successful search. Includes unknown or out-of-stock offers; excludes tax and shipping.">
             Lowest found: {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(status.lowestPrice)}
-          </span>}
-          {watch.error && watch.result && <span className="badge">Last known</span>}
+          </Badge>}
+          {watch.error && watch.result && <Badge tone="warning">Last known</Badge>}
         </div>
         <p className="muted">Google Shopping · Last checked: {watch.last_checked_at ? new Date(watch.last_checked_at).toLocaleString() : 'Pending check'}</p>
-        {watch.error && <p role="alert" className="error">{watch.error}</p>}
+        {watch.error && <Alert role="alert" tone="error" title={watch.error} />}
         <details className="watch-details"><summary>Details and latest offers</summary>
           {watch.result ? <>
             <p className="muted">Last successful observation: {new Date(watch.result.checked_at).toLocaleString()}. Missing offers are not proof of out-of-stock inventory.</p>
             <div className="offer-controls">
-              <label>Sort offers<select value={view.sort} onChange={event => {
+              <Select label="Sort offers" value={view.sort} onChange={event => {
                 const option = offerSortOptions.find(option => option.value === event.target.value);
                 if (option) setViews(current => ({ ...current, [watch.id]: { ...view, sort: option.value } }));
-              }}>{offerSortOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-              <label>Seller confidence<select value={view.seller} onChange={event => {
+              }}>{offerSortOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>
+              <Select label="Seller confidence" value={view.seller} onChange={event => {
                 const option = sellerFilterOptions.find(option => option.value === event.target.value);
                 if (option) setViews(current => ({ ...current, [watch.id]: { ...view, seller: option.value } }));
-              }}>{sellerFilterOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              }}>{sellerFilterOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</Select>
             </div>
             <p className="muted">Evidence labels are not legitimacy ratings or safety guarantees. Seller names on opaque Google links are unverified; recognized marketplaces do not establish individual sellers' reliability. Filters only change this view, not monitoring or product tags.</p>
             <h3>Required text matches (not retailer-verified)</h3>
@@ -139,7 +141,7 @@ export default function ShoppingDiscovery({ existingProducts, existingCount = 0,
           </> : <p className="muted">No successful check yet.</p>}
           {watch.input.example_url && <p className="muted discovery-reference">Reference: {watch.input.example_url}</p>}
         </details>
-        <div className="discovery-actions"><button className="danger" disabled={busy} onClick={() => void remove(watch.id)}>Remove product</button></div>
+        <div className="discovery-actions"><Button variant="danger" disabled={busy} onClick={() => void remove(watch.id)}>Remove product</Button></div>
       </li>;
       })}</ul>
       {existingProducts}

@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { errorMessage } from '../api';
 import type { NewItem } from '../types';
+import { Button } from './Button';
+import { Alert, Checkbox, Input, Select } from './UI';
 
 export default function AddItem({ onAdd }: { onAdd(item: NewItem): Promise<void> }) {
   const [busy, setBusy] = useState(false);
@@ -50,31 +52,31 @@ export default function AddItem({ onAdd }: { onAdd(item: NewItem): Promise<void>
     <p className="muted">Amazon accepts a full amazon.com/dp/ASIN URL, a 10-character ASIN, or an https://a.co/d/ share link.</p>
     <p className="muted">Target links with preselect track that selected variant. Target pages that load stock/price only through site JavaScript are not supported; the app will show an error, not guessed stock.</p>
     <form onSubmit={submit} className="add-form">
-      <label>Retailer<select name="retailer" value={retailer} disabled={busy} onChange={event => {
+      <Select label="Retailer" name="retailer" value={retailer} disabled={busy} onChange={event => {
         const value = event.target.value;
         if (value === 'amazon' || value === 'target' || value === 'bestbuy' || value === 'apple') {
           setRetailer(value); setFulfillment('shipping');
         }
-      }}><option value="amazon">Amazon</option><option value="target">Target</option><option value="bestbuy">Best Buy</option><option value="apple">Apple</option></select></label>
-      <label>Brand<input name="brand" maxLength={120} placeholder="e.g. Apple" /></label>
-      <label>Model<input name="model" maxLength={200} placeholder="Product name" /></label>
-      <label>SKU<input name="sku" maxLength={120} placeholder="Optional product identifier" /></label>
-      <label className="wide">Product URL<input name="url" type="url" maxLength={2048} placeholder="https://…" /></label>
+      }}><option value="amazon">Amazon</option><option value="target">Target</option><option value="bestbuy">Best Buy</option><option value="apple">Apple</option></Select>
+      <Input label="Brand" name="brand" maxLength={120} placeholder="e.g. Apple" />
+      <Input label="Model" name="model" maxLength={200} placeholder="Product name" />
+      <Input label="SKU" name="sku" maxLength={120} placeholder="Optional product identifier" />
+      <div className="wide"><Input label="Product URL" name="url" type="url" maxLength={2048} placeholder="https://…" /></div>
       {retailer === 'apple' && <>
-        <label>Availability type<select value={fulfillment} disabled={busy} onChange={event => {
+        <Select label="Availability type" value={fulfillment} disabled={busy} onChange={event => {
           if (event.target.value === 'shipping' || event.target.value === 'pickup') setFulfillment(event.target.value);
-        }}><option value="shipping">Online / shipping</option><option value="pickup">Apple Store pickup</option></select></label>
+        }}><option value="shipping">Online / shipping</option><option value="pickup">Apple Store pickup</option></Select>
         {fulfillment === 'pickup' && <>
-          <label>Pickup ZIP code<input name="pickup_zip" inputMode="numeric" pattern="[0-9]{5}" maxLength={5} required disabled={busy} autoComplete="postal-code" placeholder="Five-digit US ZIP" /></label>
-          <label>Search radius (miles)<input name="pickup_radius_miles" type="number" min="1" max="250" step="1" defaultValue="50" required disabled={busy} /></label>
+          <Input label="Pickup ZIP code" name="pickup_zip" inputMode="numeric" pattern="[0-9]{5}" maxLength={5} required disabled={busy} autoComplete="postal-code" placeholder="Five-digit US ZIP" />
+          <Input label="Search radius (miles)" name="pickup_radius_miles" type="number" min="1" max="250" step="1" defaultValue="50" required disabled={busy} />
           <p className="muted wide">Your ZIP is saved with this product and sent to Apple to find nearby pickup stores. No street address or GPS is collected. Alerts cover available stores returned by Apple within this radius, measured from the ZIP area, not driving distance. Apple may limit results or block checks.</p>
         </>}
       </>}
-      <label className="toggle"><input type="checkbox" checked={notifyStock} onChange={event => setNotifyStock(event.target.checked)} disabled={busy} />Notify when in stock</label>
-      <label className="toggle"><input type="checkbox" checked={notifyPrice} onChange={event => setNotifyPrice(event.target.checked)} disabled={busy} />Notify at target price</label>
-      <label>Target price ($)<input name="target_price" type="number" min="0" max="9999999999.99" step="0.01" placeholder="Required for price alerts" required={notifyPrice} disabled={!notifyPrice || busy} /></label>
-      <button className="primary add-submit" disabled={busy}>{busy ? 'Adding…' : '+ Add product'}</button>
+      <Checkbox label="Notify when in stock" checked={notifyStock} onChange={event => setNotifyStock(event.target.checked)} disabled={busy} />
+      <Checkbox label="Notify at target price" checked={notifyPrice} onChange={event => setNotifyPrice(event.target.checked)} disabled={busy} />
+      <Input label="Target price ($)" name="target_price" type="number" min="0" max="9999999999.99" step="0.01" placeholder="Required for price alerts" required={notifyPrice} disabled={!notifyPrice || busy} />
+      <Button type="submit" className="add-submit" loading={busy}>{busy ? 'Adding…' : '+ Add product'}</Button>
     </form>
-    {error && <p role="alert" className="error">{error}</p>}
+    {error && <Alert role="alert" tone="error" title={error} />}
   </section>;
 }

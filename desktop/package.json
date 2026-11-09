@@ -11,6 +11,8 @@
     "start": "electron .",
     "test": "electron test/local-smoke.cjs && electron test/shopping-smoke.cjs",
     "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac --arm64 --x64 --publish never -c.mac.identity=-",
+    "package:win": "npm run build && electron-builder --win --x64 --publish never",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test:storybook": "vitest run --project storybook"

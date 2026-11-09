@@ -14,6 +14,32 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const UnifiedDashboard: Story = {};
+export const DesignSystemApplied: Story = {
+  play: async ({ canvas, canvasElement, userEvent }) => {
+    await canvas.findByText('Lowest found: $1,999.00');
+    const workspace = canvasElement.querySelector<HTMLElement>('.workspace')!;
+    const check = canvas.getByRole('button', { name: 'Check now' });
+    await expect(check).toHaveClass('ui-button--primary');
+    await expect(canvas.getByRole('button', { name: /Dashboard/ })).toHaveAttribute('aria-current', 'page');
+    for (const button of canvas.getAllByRole('button')) {
+      await expect(button).toHaveClass('ui-button');
+      await expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    }
+    workspace.style.setProperty('--action-primary-bg', 'rgb(100, 40, 120)');
+    workspace.style.setProperty('--bg-surface', 'rgb(20, 30, 40)');
+    try {
+      await waitFor(() => expect(getComputedStyle(check).backgroundColor).toBe('rgb(100, 40, 120)'));
+      await expect(getComputedStyle(workspace.querySelector('.panel')!).backgroundColor).toBe('rgb(20, 30, 40)');
+    } finally {
+      workspace.style.removeProperty('--action-primary-bg');
+      workspace.style.removeProperty('--bg-surface');
+    }
+    await userEvent.click(canvas.getByRole('button', { name: /Settings/ }));
+    await expect(canvas.getByLabelText('Desktop notifications')).toHaveAccessibleDescription('Receive native alerts while the app is running in the tray.');
+    await expect(canvas.getByLabelText('Check interval (minutes)')).toBeRequired();
+    await expect(canvas.getByRole('button', { name: 'Save preferences' })).toHaveAttribute('type', 'submit');
+  },
+};
 export const EmptyDevice: Story = {
   beforeEach: () => { installDesktopApiStub({ items: async () => [], shoppingWatches: async () => [], notifications: async () => [] }); },
 };

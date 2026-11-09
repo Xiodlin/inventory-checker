@@ -73,3 +73,26 @@ export const SaveFailure: Story = {
     await expect(canvas.getByRole('button', { name: 'Save preferences' })).toBeEnabled();
   },
 };
+
+let finishNotificationTest: (() => void) | undefined;
+export const OperationSpecificLoading: Story = {
+  beforeEach: () => {
+    finishNotificationTest = undefined;
+    installDesktopApiStub({ testNotification: () => new Promise<void>(resolve => { finishNotificationTest = resolve; }) });
+  },
+  play: async ({ canvas, userEvent }) => {
+    const test = canvas.getByRole('button', { name: 'Test desktop notification' });
+    const save = canvas.getByRole('button', { name: 'Save preferences' });
+    await userEvent.click(test);
+    try {
+      await expect(test).toBeDisabled();
+      await expect(test).toHaveAttribute('aria-busy', 'true');
+      await expect(getComputedStyle(test).cursor).toBe('progress');
+      await expect(save).toBeDisabled();
+      await expect(save).not.toHaveAttribute('aria-busy');
+      await expect(getComputedStyle(save).cursor).toBe('default');
+    } finally { finishNotificationTest?.(); }
+    await expect(await canvas.findByRole('status')).toHaveTextContent('The OS accepted the test notification.');
+    await expect(save).toBeEnabled();
+  },
+};

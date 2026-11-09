@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { errorMessage } from '../api';
 import type { InventoryNotification } from '../types';
+import { Button } from './Button';
+import { Alert, EmptyState } from './UI';
 
 export default function NotificationPanel({ notifications, onRead, onClear, onDismiss, onOpen }: {
   notifications: InventoryNotification[];
@@ -33,29 +35,29 @@ export default function NotificationPanel({ notifications, onRead, onClear, onDi
   }
   return <section className="panel">
     <div className="section-heading"><div><span className="eyebrow">UPDATES</span><h2>Notifications</h2></div>
-      <button className="danger" disabled={!notifications.length || busy !== null || clearing}
-        onClick={() => { setError(''); setConfirming(true); }}>Clear notifications</button>
+      <Button variant="danger" disabled={!notifications.length || busy !== null || clearing}
+        onClick={() => { setError(''); setConfirming(true); }}>Clear notifications</Button>
     </div>
     {confirming && <div role="group" aria-label="Confirm clearing notifications">
       <p className="muted">Delete all saved notifications on this device, including unread alerts and pending delivery retries? This cannot be undone. Product monitoring and future alerts stay enabled. Already displayed system notifications are not removed.</p>
       <div className="actions">
-        <button className="danger" disabled={clearing || busy !== null} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Delete all notifications'}</button>
-        <button disabled={clearing} onClick={() => setConfirming(false)}>Cancel</button>
+        <Button variant="danger" loading={clearing} disabled={busy !== null} onClick={() => void clear()}>{clearing ? 'Clearing…' : 'Delete all notifications'}</Button>
+        <Button variant="secondary" disabled={clearing} onClick={() => setConfirming(false)}>Cancel</Button>
       </div>
     </div>}
-    {notifications.length === 0 ? <div className="empty"><h3>You're all caught up</h3><p>Inventory and price alerts will appear here.</p></div> :
+    {notifications.length === 0 ? <EmptyState title="You're all caught up">Inventory and price alerts will appear here.</EmptyState> :
       <ul className="notifications">{notifications.map(notification => <li key={notification.id} className={notification.read ? '' : 'unread'}>
-        <div><button className="notification-open" disabled={busy !== null || clearing}
+        <div><Button variant="ghost" className="notification-open" disabled={busy !== null || clearing}
           aria-label={`Open product for ${notification.title}`} onClick={() => void act(notification, true)}>
-          <strong>{notification.title}</strong><p>{notification.body}</p></button><small>{new Date(notification.created_at).toLocaleString()}</small>
-          {notification.delivery_error && <p role="alert">Device alert not delivered: {notification.delivery_error}</p>}
+          <strong>{notification.title}</strong><span className="notification-body">{notification.body}</span></Button><small>{new Date(notification.created_at).toLocaleString()}</small>
+          {notification.delivery_error && <Alert role="alert" tone="warning" title={`Device alert not delivered: ${notification.delivery_error}`} />}
         </div>
         <div className="actions">
-          {!notification.read && <button disabled={busy !== null || clearing} onClick={() => void markRead(notification.id)}>{busy === notification.id ? 'Saving…' : 'Mark read'}</button>}
-          <button className="danger" aria-label={`Dismiss ${notification.title}`} disabled={busy !== null || clearing}
-            onClick={() => void act(notification, false)}>Dismiss</button>
+          {!notification.read && <Button variant="secondary" disabled={busy !== null || clearing} onClick={() => void markRead(notification.id)}>{busy === notification.id ? 'Saving…' : 'Mark read'}</Button>}
+          <Button variant="danger" aria-label={`Dismiss ${notification.title}`} disabled={busy !== null || clearing}
+            onClick={() => void act(notification, false)}>Dismiss</Button>
         </div>
       </li>)}</ul>}
-    {error && <p role="alert" className="error">{error}</p>}
+    {error && <Alert role="alert" tone="error" title={error} />}
   </section>;
 }
